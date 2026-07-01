@@ -1,0 +1,35 @@
+# Python
+backend/.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Env / secrets
+.env
+.env.local
+
+# Cognee local stores (SQLite + LanceDB + Kuzu system dirs)
+.cognee_system/
+.cognee_data/
+.data_storage/
+cognee_data/
+*.lance/
+
+# Claude Code local settings / plans
+.claude/
+
+# App SQLite
+backend/echocoach.db
+backend/*.db
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env*.local
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

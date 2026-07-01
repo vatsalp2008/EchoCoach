@@ -1,0 +1,9 @@
+cognee
+google-genai
+fastapi
+uvicorn[standard]
+praw
+pydantic
+python-dotenv
+httpx
+pytest
