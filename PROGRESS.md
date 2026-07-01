@@ -52,6 +52,12 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
    dataset at session end, not bare, or it 404s on an empty graph.
 5. If a run crashes mid-op you may leave a stray Kuzu worker holding a lock:
    `pkill -9 -f cognee_db_workers` then delete `backend/.cognee_data` + `backend/.cognee_system`.
+6. **⚠️ LLM quota (current blocker):** the Gemini key in use is on a free tier
+   capped at **~20 requests/day** for `gemini-2.5-flash-lite`. Cognee's `cognify`
+   makes several LLM calls per `remember()`, so one full session exhausts it.
+   Resolution pending (standard AI Studio `AIza…` key with higher RPD, and/or
+   routing Cognee's LLM to local Ollama). Backend logic is written & imports
+   clean; end-to-end run is blocked only by this quota.
 
 ---
 
@@ -73,11 +79,12 @@ backend/.venv/bin/python backend/scripts/cognee_smoke_test.py
 ---
 
 ## 🚧 What's left (spec phases)
-- [ ] **Phase 1 — core loop (text technical interview).** schemas (grading JSON §4.2),
-      hardcoded question bank (§5.1), technical grading prompt (§5.2 verbatim), follow-up
-      cap=2 (§5.3), no-feedback-leakage (§5.3a), session loop (§5.4), first-session
-      diagnostic (§5.5), end-of-session debrief (§5.6), SQLite bookkeeping, minimal
-      text-only frontend. **This is the safety net — must be rock solid.**
+- [~] **Phase 1 — core loop (text technical interview).** Backend CODE COMPLETE:
+      schemas (grading JSON §4.2), question bank (§5.1), technical grading prompt
+      (§5.2 verbatim), follow-up cap=2 (§5.3), no-feedback-leakage (§5.3a), session
+      loop (§5.4), first-session diagnostic (§5.5), debrief (§5.6), SQLite bookkeeping,
+      FastAPI routes. **End-to-end verification BLOCKED on the LLM quota (gotcha #6).**
+      Test harness: `backend/scripts/phase1_e2e.py`. Minimal text-only frontend: TODO.
 - [ ] **Phase 2 — behavioral domain + graph viz.** behavioral bank + grading prompt
       (§6.2 verbatim; delivery DOES affect signal here), `/api/graph`, react-force-graph.
 - [ ] **Phase 3 — external grounding.** Reddit (PRAW) + GitHub search → filter → `remember`
