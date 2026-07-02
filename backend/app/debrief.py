@@ -23,25 +23,27 @@ Question text for reference (topic -> question):
 The candidate's PRIOR state on these topics, from their long-term memory graph:
 {prior}
 
-Write the debrief in exactly these four sections, as markdown with these headers:
+Write a SHORT, scannable debrief in markdown. Be concise — this is a quick
+post-interview summary, not an essay. Hard limits:
+- One sentence of overall summary.
+- ONE line per topic (a tight bullet), no multi-sentence paragraphs.
+- Total under ~150 words.
+No preamble, no filler, no "great job" padding. Use these exact section headers:
 
-## Topics covered this session
-For each topic: name the question in plain language and recap what went well or
-didn't, rewritten from the evidence/reasoning into coaching tone.
+## Summary
+One sentence: overall how the session went.
 
-## Progress since last session
-Compare this session's signals to the prior state above. Call out any topic that
-moved toward mastery, or slipped back. If there's no prior state, say this is the
-baseline session.
+## By topic
+One bullet per topic: `- **topic name** — <mastered/partial/struggled/avoided in plain words>: <≤12-word why>`
 
-## What's still weak
-Topics graded "struggled" or "avoided" and left unresolved after follow-ups.
+## Progress
+One short bullet per topic that moved vs the prior state (e.g. "struggled → mastered").
+If there's no prior state, a single line: "Baseline session — first time on these topics."
 
-## What's coming next
-A short teaser of what the next session will likely focus on, based on the
-weakest remaining topics.
+## Focus next
+1–3 short bullets: the specific things to work on next.
 
-Return only the markdown report."""
+Return only the markdown report, nothing else."""
 
 
 async def generate_debrief(session_id: str) -> str:
@@ -78,27 +80,17 @@ def _template_debrief(signals: list[dict], questions: dict[str, str]) -> str:
     for s in signals:
         latest[s["topic"]] = s
     weak = [t for t, s in latest.items() if s["signal"] in ("struggled", "avoided")]
-    strong = [t for t, s in latest.items() if s["signal"] == "mastered"]
 
-    lines = ["## Topics covered this session"]
+    def nice(t: str) -> str:
+        return t.replace("_", " ")
+
+    lines = ["## Summary",
+             "Quick summary from your graded answers (detailed synthesis skipped — LLM quota reached).",
+             "", "## By topic"]
     for topic, s in latest.items():
-        q = questions.get(topic, topic)
-        lines.append(
-            f"- **{topic.replace('_', ' ')}** — {s['signal']} "
-            f"({s['delivery']} delivery). {s.get('evidence', '')}"
-        )
-    lines += ["", "## Progress since last session",
-              "_(Detailed synthesis unavailable right now — LLM quota reached. "
-              "This is a summary built directly from your graded answers.)_"]
-    lines += ["", "## What's still weak"]
-    lines += [f"- {t.replace('_', ' ')}" for t in weak] or ["- Nothing flagged as weak this session."]
-    lines += ["", "## What's coming next"]
-    if weak:
-        lines.append(f"Next session will likely press on: {', '.join(t.replace('_', ' ') for t in weak)}.")
-    else:
-        lines.append("Next session will introduce new topics and revisit anything not yet mastered.")
-    if strong:
-        lines.append(f"\nYou showed strength on: {', '.join(t.replace('_', ' ') for t in strong)}.")
+        lines.append(f"- **{nice(topic)}** — {s['signal']} ({s['delivery']} delivery)")
+    lines += ["", "## Focus next"]
+    lines += [f"- {nice(t)}" for t in weak] or ["- Keep reinforcing what you covered; no weak topics flagged."]
     return "\n".join(lines)
 
 
