@@ -12,7 +12,8 @@ from pydantic import BaseModel, Field
 
 Signal = Literal["mastered", "partial", "struggled", "avoided"]
 Delivery = Literal["concise", "rambling", "vague", "hedgy", "direct"]
-Domain = Literal["technical", "behavioral"]
+Domain = Literal["technical", "behavioral"]  # a single signal's domain
+SessionMode = Literal["technical", "behavioral", "full"]  # session-level focus
 
 
 class GradingAssessment(BaseModel):
@@ -61,7 +62,8 @@ class GradingSignal(GradingAssessment):
 class StartSessionRequest(BaseModel):
     target_role: str
     company: Optional[str] = None
-    domain_focus: Domain = "technical"
+    domain_focus: SessionMode = "technical"
+    user_id: str = "default_user"  # lightweight profile: scopes the memory graph
 
 
 class StartSessionResponse(BaseModel):

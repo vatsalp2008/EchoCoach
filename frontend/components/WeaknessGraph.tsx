@@ -39,7 +39,8 @@ export default function WeaknessGraph() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getGraph().then(setData).catch((e) => setError(String(e)));
+    const user = localStorage.getItem("echocoach_user") || "default_user";
+    getGraph(user).then(setData).catch((e) => setError(String(e)));
   }, []);
 
   useEffect(() => {

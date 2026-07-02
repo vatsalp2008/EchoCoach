@@ -163,4 +163,12 @@ DIAGNOSTIC_SEQUENCE: list[str] = [
 DIAGNOSTIC_BY_DOMAIN: dict[str, list[str]] = {
     "technical": DIAGNOSTIC_SEQUENCE,
     "behavioral": ["beh_conflict", "beh_failure", "beh_prioritization"],
+    # "full" = a realistic mixed loop: DSA -> system design -> project -> two stories.
+    "full": [
+        "tech_two_pointer",
+        "tech_url_shortener",
+        "tech_project_walkthrough",
+        "beh_conflict",
+        "beh_failure",
+    ],
 }

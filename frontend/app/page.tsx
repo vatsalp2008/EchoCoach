@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   AnswerResponse,
-  Domain,
   getDebrief,
+  SessionMode,
   startSession,
   submitAnswer,
 } from "@/lib/api";
@@ -21,9 +21,16 @@ interface CurrentQ {
 
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("setup");
+  const [username, setUsername] = useState("");
   const [role, setRole] = useState("");
   const [company, setCompany] = useState("");
-  const [domain, setDomain] = useState<Domain>("technical");
+  const [domain, setDomain] = useState<SessionMode>("technical");
+
+  // Load the saved profile name on the client (localStorage isn't available at SSR).
+  useEffect(() => {
+    const saved = localStorage.getItem("echocoach_user");
+    if (saved) setUsername(saved);
+  }, []);
   const [sessionId, setSessionId] = useState("");
   const [current, setCurrent] = useState<CurrentQ | null>(null);
   const [answer, setAnswer] = useState("");
@@ -41,11 +48,14 @@ export default function Home() {
   async function startInterview() {
     setError("");
     setPhase("loading");
+    const uid = username.trim() || "guest";
+    localStorage.setItem("echocoach_user", uid);
     try {
       const res = await startSession({
         target_role: role.trim(),
         company: company.trim() || undefined,
         domain_focus: domain,
+        user_id: uid,
       });
       setSessionId(res.session_id);
       setCurrent({
@@ -128,6 +138,17 @@ export default function Home() {
           <form onSubmit={beginIntro} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">
+                Your name <span className="text-neutral-400">(so EchoCoach remembers you)</span>
+              </label>
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="e.g. vatsal"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">
                 Target role <span className="text-red-500">*</span>
               </label>
               <input
@@ -154,19 +175,25 @@ export default function Home() {
                 Interview type
               </label>
               <div className="inline-flex rounded-lg border border-neutral-300 p-0.5 bg-white">
-                {(["technical", "behavioral"] as Domain[]).map((d) => (
+                {(
+                  [
+                    ["technical", "Technical"],
+                    ["behavioral", "Behavioral"],
+                    ["full", "Full (tech + behavioral)"],
+                  ] as [SessionMode, string][]
+                ).map(([d, label]) => (
                   <button
                     key={d}
                     type="button"
                     onClick={() => setDomain(d)}
                     className={
-                      "rounded-md px-3 py-1.5 text-sm capitalize " +
+                      "rounded-md px-3 py-1.5 text-sm " +
                       (domain === d
                         ? "bg-neutral-900 text-white"
                         : "text-neutral-600 hover:text-neutral-900")
                     }
                   >
-                    {d}
+                    {label}
                   </button>
                 ))}
               </div>

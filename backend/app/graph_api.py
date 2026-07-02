@@ -38,8 +38,8 @@ def _pretty(topic: str) -> str:
 
 
 @router.get("/api/graph")
-async def graph() -> dict:
-    signals = db.all_signals()  # oldest-first
+async def graph(user: str = "default_user") -> dict:
+    signals = db.all_signals(user)  # oldest-first, scoped to this profile
     latest: dict[str, str] = {}
     counts: dict[str, int] = {}
     last_seen: dict[str, str] = {}
@@ -51,7 +51,7 @@ async def graph() -> dict:
     topics = sorted(set(_TOPIC_DOMAIN) | set(latest))
     nodes = []
     for topic in topics:
-        n_mastered, n_sessions = db.mastered_counts(topic)
+        n_mastered, n_sessions = db.mastered_counts(topic, user)
         nodes.append(
             {
                 "id": topic,

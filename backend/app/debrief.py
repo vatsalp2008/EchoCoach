@@ -56,10 +56,13 @@ async def generate_debrief(session_id: str) -> str:
     # Question text per topic (best-effort; follow-ups aren't in the bank).
     questions = {t: (get_question_text(t) or t) for t in topics}
 
+    row = db.get_session(session_id)
+    user_id = row["user_id"] if row else "default_user"
+
     # Prior state for the progress section, derived from the local signal mirror
     # (fast, deterministic). Cognee recall() drives the live routing instead —
     # doing it here too would be slow and redundant.
-    prior = _prior_state_from_db(session_id, topics)
+    prior = _prior_state_from_db(session_id, user_id, topics)
 
     prompt = _DEBRIEF_PROMPT.format(
         signals=json.dumps(signals, indent=2),
@@ -101,12 +104,12 @@ def get_question_text(topic: str) -> str | None:
     return q["question"] if q else None
 
 
-def _prior_state_from_db(session_id: str, topics: list[str]) -> str:
-    """Prior signal per topic from OTHER sessions (the persistent weakness graph's
-    local mirror), so the debrief can call out session-over-session movement."""
+def _prior_state_from_db(session_id: str, user_id: str, topics: list[str]) -> str:
+    """Prior signal per topic from this user's OTHER sessions (the persistent
+    weakness graph's local mirror), for session-over-session movement."""
     topic_set = set(topics)
     prior: dict[str, dict] = {}
-    for s in db.all_signals():
+    for s in db.all_signals(user_id):
         if s["session_id"] == session_id or s["topic"] not in topic_set:
             continue
         prior[s["topic"]] = s  # ordered oldest-first, so last prior wins

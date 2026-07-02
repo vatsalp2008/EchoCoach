@@ -45,6 +45,7 @@ CREATE TABLE IF NOT EXISTS question_bank (
 );
 CREATE TABLE IF NOT EXISTS grading_signals (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    TEXT NOT NULL DEFAULT 'default_user',
     session_id TEXT NOT NULL,
     topic      TEXT NOT NULL,
     domain     TEXT NOT NULL,
@@ -125,13 +126,13 @@ def increment_follow_up(session_id: str, topic: str) -> int:
 
 
 # ── grading signals (local mirror for the debrief) ───────────────────────────
-def record_signal(signal: dict) -> None:
+def record_signal(signal: dict, user_id: str = "default_user") -> None:
     with connect() as conn:
         conn.execute(
-            "INSERT INTO grading_signals(session_id, topic, domain, signal, payload, created_at) "
-            "VALUES (?,?,?,?,?,?)",
+            "INSERT INTO grading_signals(user_id, session_id, topic, domain, signal, payload, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
             (
-                signal["session_id"], signal["topic"], signal["domain"],
+                user_id, signal["session_id"], signal["topic"], signal["domain"],
                 signal["signal"], json.dumps(signal), signal["timestamp"],
             ),
         )
@@ -146,22 +147,25 @@ def signals_for_session(session_id: str) -> list[dict]:
         return [json.loads(r["payload"]) for r in rows]
 
 
-def all_signals() -> list[dict]:
-    """Every grading signal ever recorded, oldest first — the local mirror of
-    the cross-session weakness graph used for routing."""
+def all_signals(user_id: str = "default_user") -> list[dict]:
+    """Every grading signal for a user, oldest first — the local mirror of that
+    user's cross-session weakness graph, used for routing and the graph view."""
     with connect() as conn:
-        rows = conn.execute("SELECT payload FROM grading_signals ORDER BY id").fetchall()
+        rows = conn.execute(
+            "SELECT payload FROM grading_signals WHERE user_id=? ORDER BY id",
+            (user_id,),
+        ).fetchall()
         return [json.loads(r["payload"]) for r in rows]
 
 
-def mastered_counts(topic: str) -> tuple[int, int]:
-    """Return (num mastered signals, num distinct sessions) for a topic —
+def mastered_counts(topic: str, user_id: str = "default_user") -> tuple[int, int]:
+    """Return (num mastered signals, num distinct sessions) for a user's topic —
     feeds the mastery threshold check (spec 4.3)."""
     with connect() as conn:
         row = conn.execute(
             "SELECT COUNT(*) AS n, COUNT(DISTINCT session_id) AS s "
-            "FROM grading_signals WHERE topic=? AND signal='mastered'",
-            (topic,),
+            "FROM grading_signals WHERE user_id=? AND topic=? AND signal='mastered'",
+            (user_id, topic),
         ).fetchone()
         return row["n"], row["s"]
 

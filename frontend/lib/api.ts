@@ -3,6 +3,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 export type Domain = "technical" | "behavioral";
+export type SessionMode = "technical" | "behavioral" | "full";
 
 export interface StartSessionResponse {
   session_id: string;
@@ -32,7 +33,8 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 export function startSession(input: {
   target_role: string;
   company?: string;
-  domain_focus?: Domain;
+  domain_focus?: SessionMode;
+  user_id?: string;
 }) {
   return post<StartSessionResponse>("/api/session", input);
 }
@@ -60,8 +62,8 @@ export interface GraphData {
   edges: { source: string; target: string }[];
 }
 
-export async function getGraph(): Promise<GraphData> {
-  const res = await fetch(`${API_BASE}/api/graph`);
+export async function getGraph(user = "default_user"): Promise<GraphData> {
+  const res = await fetch(`${API_BASE}/api/graph?user=${encodeURIComponent(user)}`);
   if (!res.ok) throw new Error(`graph failed: ${res.status}`);
   return res.json() as Promise<GraphData>;
 }

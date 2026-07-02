@@ -42,8 +42,13 @@ _SEVERITY = {"avoided": 4, "struggled": 3, "partial": 2, "mastered": 0}
 _ACTIVE: dict[str, dict] = {}
 
 
-def _topic_dataset(topic: str) -> str:
-    return f"topic:{topic}"
+def _slug(user_id: str) -> str:
+    return "".join(c if c.isalnum() else "_" for c in user_id.lower()) or "user"
+
+
+def _topic_dataset(topic: str, user_id: str) -> str:
+    """Per-user topic dataset so each profile has its own weakness graph."""
+    return f"topic:{_slug(user_id)}:{topic}"
 
 
 def _now() -> str:
@@ -66,18 +71,21 @@ def _memory_text(sig: GradingSignal) -> str:
 # ── start ─────────────────────────────────────────────────────────────────
 async def start_session(req: StartSessionRequest) -> StartSessionResponse:
     session_id = uuid.uuid4().hex
+    user_id = req.user_id or "default_user"
     db.create_session(
         session_id,
         started_at=_now(),
         domain_focus=req.domain_focus,
         company=req.company,
         target_role=req.target_role,
+        user_id=user_id,
     )
 
-    first = _is_first_session(req.domain_focus)
+    first = _is_first_session(req.domain_focus, user_id)
     diagnostic = DIAGNOSTIC_BY_DOMAIN.get(req.domain_focus, [])
     state = {
-        "domain": req.domain_focus,
+        "user_id": user_id,
+        "domain": req.domain_focus,  # session mode: technical | behavioral | full
         "asked_topics": [],
         "diagnostic_queue": list(diagnostic) if first else [],
         "is_first_session": first,
@@ -88,7 +96,7 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
     if first:
         q = get_question(state["diagnostic_queue"].pop(0))
     else:
-        topic = await _pick_next_topic(session_id, req.domain_focus, asked=[])
+        topic = await _pick_next_topic(user_id, req.domain_focus, asked=[])
         q = question_for_topic(topic)
 
     state["current"] = {
@@ -107,10 +115,12 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
     if state is None or state.get("current") is None:
         raise KeyError("unknown or inactive session")
     current = state["current"]
+    user_id = state["user_id"]
 
     # 1-3. Grade silently, write to the topic dataset, mirror locally.
     sig = await grade_and_remember(
         session_id=req.session_id,
+        user_id=user_id,
         topic=current["topic"],
         domain=current["domain"],
         question=current["question"],
@@ -138,17 +148,18 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
 
     if sig.follow_up_needed and not resolved and count >= FOLLOW_UP_CAP:
         # Two failed clarifications is itself a real signal (spec 5.3).
-        await _force_struggled(req.session_id, topic, current["domain"])
+        await _force_struggled(req.session_id, user_id, topic, current["domain"])
 
     # 8. Mastery check -> archive via forget() if threshold met (spec 4.3).
-    await _maybe_forget(topic)
+    await _maybe_forget(topic, user_id)
 
     # 1/9. Move to the next topic, or end the session.
     return await _advance(req.session_id, state)
 
 
 async def grade_and_remember(
-    *, session_id: str, topic: str, domain: Domain, question: str, transcript: str
+    *, session_id: str, user_id: str, topic: str, domain: Domain,
+    question: str, transcript: str,
 ) -> GradingSignal:
     from . import grading  # local import avoids a cycle at module load
 
@@ -158,11 +169,11 @@ async def grade_and_remember(
     )
     # Record to the local mirror FIRST — it's the reliable source of truth for
     # routing and the debrief. The graph write is best-effort on top.
-    db.record_signal(sig.model_dump())
-    # Cognee op: remember() -> writes the performance signal into topic:<slug>.
+    db.record_signal(sig.model_dump(), user_id)
+    # Cognee op: remember() -> writes the performance signal into topic:<user>:<slug>.
     # Fire-and-forget: the turn never waits on cognify; routing/debrief read the
     # synchronous db mirror. The write is time-bounded + breaker-aware inside memory.
-    memory.schedule_remember(_memory_text(sig), _topic_dataset(topic))
+    memory.schedule_remember(_memory_text(sig), _topic_dataset(topic, user_id))
     return sig
 
 
@@ -171,13 +182,13 @@ async def _advance(session_id: str, state: dict) -> AnswerResponse:
     if state["is_first_session"] and state["diagnostic_queue"]:
         q = get_question(state["diagnostic_queue"].pop(0))
     elif state["is_first_session"]:
-        return await _end(session_id)
+        return await _end(session_id, state["user_id"])
     else:
         if len(state["asked_topics"]) >= MAX_MAIN_QUESTIONS:
-            return await _end(session_id)
-        topic = await _pick_next_topic(session_id, state["domain"], state["asked_topics"])
+            return await _end(session_id, state["user_id"])
+        topic = await _pick_next_topic(state["user_id"], state["domain"], state["asked_topics"])
         if topic is None:
-            return await _end(session_id)
+            return await _end(session_id, state["user_id"])
         q = question_for_topic(topic)
 
     state["current"] = {
@@ -190,34 +201,41 @@ async def _advance(session_id: str, state: dict) -> AnswerResponse:
     )
 
 
-async def _end(session_id: str) -> AnswerResponse:
+async def _end(session_id: str, user_id: str) -> AnswerResponse:
     """Session boundary (spec 5.4 step 7-9): explicit improve() over each topic
     touched — deliberately on top of remember()'s per-call auto-improve — then
     a final mastery sweep. The debrief is generated lazily by its endpoint."""
     for topic in db.topics_touched(session_id):
         try:
-            await memory.improve(dataset=_topic_dataset(topic))  # Cognee op
+            await memory.improve(dataset=_topic_dataset(topic, user_id))  # Cognee op
         except Exception:
             pass  # improve is best-effort reinforcement; never fail the session
-        await _maybe_forget(topic)
+        await _maybe_forget(topic, user_id)
     db.end_session(session_id, _now())
     _ACTIVE.pop(session_id, None)
     return AnswerResponse(done=True)
 
 
 # ── routing / helpers ────────────────────────────────────────────────────────
-def _is_first_session(domain: Domain) -> bool:
-    """No graded signals yet in this domain => first session for it, so run that
-    domain's diagnostic set rather than routing from an empty history."""
+def _is_first_session(mode: str, user_id: str) -> bool:
+    """No graded signals yet for this user in this mode => first session, so run
+    the diagnostic set rather than routing from an empty history. 'full' counts
+    signals in any domain."""
     with db.connect() as conn:
-        n = conn.execute(
-            "SELECT COUNT(*) AS n FROM grading_signals WHERE domain=?", (domain,)
-        ).fetchone()["n"]
-    return n == 0
+        if mode == "full":
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM grading_signals WHERE user_id=?", (user_id,)
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT COUNT(*) AS n FROM grading_signals WHERE user_id=? AND domain=?",
+                (user_id, mode),
+            ).fetchone()
+    return row["n"] == 0
 
 
 async def _pick_next_topic(
-    session_id: str, domain: Domain, asked: list[str]
+    user_id: str, mode: str, asked: list[str]
 ) -> str | None:
     """Route toward the weakest unresolved topic (spec 5.4 step 1).
 
@@ -238,10 +256,11 @@ async def _pick_next_topic(
         except Exception:
             pass  # routing must survive a recall hiccup; db mirror is the backstop
 
-    # Latest signal per topic, from the graph's local mirror.
+    # Latest signal per topic, from this user's local mirror. In 'full' mode we
+    # consider every domain; otherwise just the session's domain.
     latest: dict[str, dict] = {}
-    for s in db.all_signals():
-        if s["domain"] != domain:
+    for s in db.all_signals(user_id):
+        if mode != "full" and s["domain"] != mode:
             continue
         latest[s["topic"]] = s  # ordered by id asc, so last write wins
 
@@ -257,8 +276,9 @@ async def _pick_next_topic(
         candidates.sort(reverse=True)  # highest severity, then most recent
         return candidates[0][2]
 
-    # Fallback: any topic in this domain not yet touched this session.
-    for topic in all_topics(domain):
+    # Fallback: any topic not yet touched this session (all domains if 'full').
+    pool = all_topics(None) if mode == "full" else all_topics(mode)
+    for topic in pool:
         if topic not in asked:
             return topic
     return None
@@ -287,7 +307,9 @@ async def _generate_follow_up(
         return f"Can you go a level deeper — specifically, {focus_line}?"
 
 
-async def _force_struggled(session_id: str, topic: str, domain: Domain) -> None:
+async def _force_struggled(
+    session_id: str, user_id: str, topic: str, domain: Domain
+) -> None:
     from .schemas import GradingSignal as GS
 
     sig = GS(
@@ -297,16 +319,16 @@ async def _force_struggled(session_id: str, topic: str, domain: Domain) -> None:
         reasoning="Unresolved after the follow-up cap — recorded as a real struggle signal.",
         follow_up_needed=False, follow_up_focus=None,
     )
-    db.record_signal(sig.model_dump())
-    memory.schedule_remember(_memory_text(sig), _topic_dataset(topic))  # fire-and-forget
+    db.record_signal(sig.model_dump(), user_id)
+    memory.schedule_remember(_memory_text(sig), _topic_dataset(topic, user_id))
 
 
-async def _maybe_forget(topic: str) -> None:
+async def _maybe_forget(topic: str, user_id: str) -> None:
     """Archive a mastered topic (spec 4.3): >=3 mastered signals across >=2
     distinct sessions -> forget() the dataset so it stops being routed to."""
-    n_mastered, n_sessions = db.mastered_counts(topic)
+    n_mastered, n_sessions = db.mastered_counts(topic, user_id)
     if n_mastered >= 3 and n_sessions >= 2:
         try:
-            await memory.forget(dataset=_topic_dataset(topic))  # Cognee op
+            await memory.forget(dataset=_topic_dataset(topic, user_id))  # Cognee op
         except Exception:
             pass
