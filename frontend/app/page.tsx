@@ -17,6 +17,7 @@ import {
   stopListening,
 } from "@/lib/speech";
 import Avatar from "@/components/Avatar";
+import { useProctor } from "@/lib/useProctor";
 
 type Phase = "setup" | "intro" | "interview" | "loading" | "debrief";
 
@@ -47,6 +48,7 @@ export default function Home() {
   const [listening, setListening] = useState(false);
   const [bump, setBump] = useState(0);
   const spokenFor = useRef<string>("");
+  const proctor = useProctor();
 
   // Load the saved profile name + feature-detect speech on the client.
   useEffect(() => {
@@ -112,6 +114,7 @@ export default function Home() {
       });
       setQNumber(1);
       setPhase("interview");
+      proctor.start(); // begin focus monitoring for the session
     } catch (err) {
       setError(String(err));
       setPhase("intro");
@@ -135,6 +138,7 @@ export default function Home() {
       });
       setAnswer("");
       if (res.done) {
+        proctor.stop();
         const report = await getDebrief(sessionId);
         setDebrief(report);
         setPhase("debrief");
@@ -157,6 +161,7 @@ export default function Home() {
   function reset() {
     cancelSpeak();
     stopListening();
+    proctor.stop();
     setSpeaking(false);
     setListening(false);
     spokenFor.current = "";
@@ -304,6 +309,23 @@ export default function Home() {
 
         {phase === "interview" && current && (
           <form onSubmit={handleSubmit} className="space-y-4">
+            {proctor.warning && (
+              <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                <span>
+                  ⚠️ {proctor.warning}{" "}
+                  <span className="text-amber-600">
+                    (focus warnings: {proctor.violations})
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={proctor.dismiss}
+                  className="text-amber-600 hover:text-amber-900"
+                >
+                  dismiss
+                </button>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-neutral-500">
                 <span className="rounded-full bg-neutral-200 px-2 py-0.5">
@@ -409,6 +431,13 @@ export default function Home() {
         {phase === "debrief" && (
           <div className="space-y-4">
             <h2 className="text-xl font-semibold">Session debrief</h2>
+            {proctor.violations > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                Integrity note: you left the interview window{" "}
+                <span className="font-medium">{proctor.violations}</span> time(s)
+                during this session.
+              </div>
+            )}
             <article className="prose prose-sm prose-neutral max-w-none rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
               <ReactMarkdown>{debrief}</ReactMarkdown>
             </article>
