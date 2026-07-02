@@ -77,7 +77,8 @@ class StartSessionResponse(BaseModel):
 class AnswerRequest(BaseModel):
     session_id: str
     question_id: str
-    transcript: str
+    transcript: str = ""
+    image_b64: Optional[str] = None  # optional whiteboard sketch (base64 PNG)
 
 
 class AnswerResponse(BaseModel):

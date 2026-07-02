@@ -127,6 +127,7 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
         domain=current["domain"],
         question=current["question"],
         transcript=req.transcript,
+        image_b64=req.image_b64,
     )
 
     # 6. Follow-up logic (spec 5.3), only for the topic just answered.
@@ -162,13 +163,13 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
 
 async def grade_and_remember(
     *, session_id: str, user_id: str, topic: str, domain: Domain,
-    question: str, transcript: str,
+    question: str, transcript: str, image_b64: str | None = None,
 ) -> GradingSignal:
     from . import grading  # local import avoids a cycle at module load
 
     sig = await grading.grade_answer(
         session_id=session_id, topic=topic, domain=domain,
-        question=question, transcript=transcript,
+        question=question, transcript=transcript, image_b64=image_b64,
     )
     # Record to the local mirror FIRST — it's the reliable source of truth for
     # routing and the debrief. The graph write is best-effort on top.

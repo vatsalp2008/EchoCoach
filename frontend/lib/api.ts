@@ -45,6 +45,7 @@ export function submitAnswer(input: {
   session_id: string;
   question_id: string;
   transcript: string;
+  image_b64?: string;
 }) {
   return post<AnswerResponse>("/api/answer", input);
 }

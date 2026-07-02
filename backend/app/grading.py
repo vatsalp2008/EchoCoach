@@ -100,14 +100,21 @@ _PROMPTS = {"technical": _TECHNICAL_PROMPT, "behavioral": _BEHAVIORAL_PROMPT}
 
 
 async def grade_answer(
-    *, session_id: str, topic: str, domain: Domain, question: str, transcript: str
+    *, session_id: str, topic: str, domain: Domain, question: str, transcript: str,
+    image_b64: str | None = None,
 ) -> GradingSignal:
-    """Grade one answer -> validated GradingSignal. Temp 0.2 for consistency."""
+    """Grade one answer -> validated GradingSignal. Temp 0.2 for consistency.
+    If a whiteboard image is attached, it's graded as part of the answer."""
     prompt = _PROMPTS[domain].format(
-        topic=topic, question=question, transcript=transcript, schema=_SCHEMA
+        topic=topic, question=question, transcript=transcript or "(see attached whiteboard)",
+        schema=_SCHEMA,
     )
+    if image_b64:
+        prompt += "\n\nA whiteboard sketch from the candidate is attached — treat it as part of their answer."
     try:
-        raw = await llm_client.generate(prompt, temperature=0.2, response_format="json")
+        raw = await llm_client.generate(
+            prompt, temperature=0.2, response_format="json", image_b64=image_b64
+        )
         assessment = _parse_assessment(raw)
     except Exception:
         # Quota/timeout/network/unparsable-JSON -> heuristic fallback so the

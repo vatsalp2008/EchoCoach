@@ -58,12 +58,16 @@ async def generate(
     temperature: float = 0.3,
     response_format: str = "text",
     model: str | None = None,
+    image_b64: str | None = None,
 ) -> str:
     """Return the model's text for `prompt`.
 
     response_format="json" forces a JSON-only response (application/json), which
     is required everywhere grading output feeds the memory graph (spec principle
     #5). Callers parse + pydantic-validate the returned string.
+
+    image_b64: optional base64 PNG (e.g. a whiteboard sketch). Gemini is
+    multimodal, so it's attached as an image part alongside the prompt.
     """
     client = _get_client()
     cfg = types.GenerateContentConfig(temperature=temperature)
@@ -72,11 +76,18 @@ async def generate(
 
     # google-genai is sync; run it off the event loop so FastAPI stays async.
     import anyio
+    import base64
 
     def _call() -> str:
+        contents: object = prompt
+        if image_b64:
+            img = types.Part.from_bytes(
+                data=base64.b64decode(image_b64), mime_type="image/png"
+            )
+            contents = [prompt, img]
         resp = client.models.generate_content(
             model=model or APP_LLM_MODEL,
-            contents=prompt,
+            contents=contents,
             config=cfg,
         )
         return (resp.text or "").strip()

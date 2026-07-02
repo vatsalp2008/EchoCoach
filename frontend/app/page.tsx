@@ -18,6 +18,7 @@ import {
 } from "@/lib/speech";
 import Avatar from "@/components/Avatar";
 import CodeEditor from "@/components/CodeEditor";
+import Whiteboard from "@/components/Whiteboard";
 import { useProctor } from "@/lib/useProctor";
 
 type Phase = "setup" | "intro" | "interview" | "loading" | "debrief";
@@ -51,6 +52,10 @@ export default function Home() {
   const [bump, setBump] = useState(0);
   const spokenFor = useRef<string>("");
   const proctor = useProctor();
+
+  // Whiteboard sketch (optional, non-coding questions).
+  const [showBoard, setShowBoard] = useState(false);
+  const [imageB64, setImageB64] = useState("");
 
   // Load the saved profile name + feature-detect speech on the client.
   useEffect(() => {
@@ -126,7 +131,7 @@ export default function Home() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!current || !answer.trim()) return;
+    if (!current || (!answer.trim() && !imageB64)) return;
     stopListening();
     setListening(false);
     cancelSpeak();
@@ -138,8 +143,11 @@ export default function Home() {
         session_id: sessionId,
         question_id: current.questionId,
         transcript: answer.trim(),
+        image_b64: imageB64 || undefined,
       });
       setAnswer("");
+      setImageB64("");
+      setShowBoard(false);
       if (res.done) {
         proctor.stop();
         const report = await getDebrief(sessionId);
@@ -168,6 +176,8 @@ export default function Home() {
     proctor.stop();
     setSpeaking(false);
     setListening(false);
+    setShowBoard(false);
+    setImageB64("");
     spokenFor.current = "";
     setPhase("setup");
     setRole("");
@@ -403,10 +413,32 @@ export default function Home() {
               />
             )}
 
+            {showBoard && !current.coding && (
+              <Whiteboard onChange={setImageB64} />
+            )}
+
             <div className="flex items-center gap-3">
-              <button type="submit" className={primaryBtn} disabled={!answer.trim()}>
+              <button
+                type="submit"
+                className={primaryBtn}
+                disabled={!answer.trim() && !imageB64}
+              >
                 Submit answer
               </button>
+              {!current.coding && (
+                <button
+                  type="button"
+                  onClick={() => setShowBoard((s) => !s)}
+                  className={
+                    "rounded-lg px-4 py-2 text-sm font-medium border " +
+                    (showBoard
+                      ? "border-sky-300 bg-sky-50 text-sky-700"
+                      : "border-neutral-300 text-neutral-700 hover:bg-neutral-100")
+                  }
+                >
+                  🖊 {showBoard ? "Hide whiteboard" : "Whiteboard"}
+                </button>
+              )}
               {voiceMode && !current.coding && (
                 <button
                   type="button"
