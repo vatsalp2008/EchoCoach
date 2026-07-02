@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from . import db, llm_client, memory
+from . import db, llm_client
 from .llm_client import LLMQuotaError
 
 _DEBRIEF_PROMPT = """You are an expert interview coach writing a candidate's end-of-session debrief.
@@ -54,8 +54,10 @@ async def generate_debrief(session_id: str) -> str:
     # Question text per topic (best-effort; follow-ups aren't in the bank).
     questions = {t: (get_question_text(t) or t) for t in topics}
 
-    # Cognee op: recall() the prior state of each topic for the progress section.
-    prior = await _prior_state(topics)
+    # Prior state for the progress section, derived from the local signal mirror
+    # (fast, deterministic). Cognee recall() drives the live routing instead —
+    # doing it here too would be slow and redundant.
+    prior = _prior_state_from_db(session_id, topics)
 
     prompt = _DEBRIEF_PROMPT.format(
         signals=json.dumps(signals, indent=2),
@@ -107,29 +109,18 @@ def get_question_text(topic: str) -> str | None:
     return q["question"] if q else None
 
 
-async def _prior_state(topics: list[str]) -> str:
-    parts = []
-    for topic in topics:
-        try:
-            res = await memory.recall(
-                f"Summarize the candidate's history and mastery on '{topic}' "
-                "across all prior sessions.",
-                datasets=[f"topic:{topic}"],
-                top_k=5,
-            )
-            parts.append(f"- {topic}: {_flatten_recall(res)}")
-        except Exception:
-            parts.append(f"- {topic}: (no prior memory available)")
-    return "\n".join(parts) if parts else "(no prior state)"
-
-
-def _flatten_recall(res) -> str:
-    """recall() returns a list of typed response entries; pull their text out."""
-    if not res:
-        return "(nothing recalled)"
-    texts = []
-    for entry in res:
-        text = getattr(entry, "text", None)
-        if text:
-            texts.append(text)
-    return " ".join(texts) if texts else "(nothing recalled)"
+def _prior_state_from_db(session_id: str, topics: list[str]) -> str:
+    """Prior signal per topic from OTHER sessions (the persistent weakness graph's
+    local mirror), so the debrief can call out session-over-session movement."""
+    topic_set = set(topics)
+    prior: dict[str, dict] = {}
+    for s in db.all_signals():
+        if s["session_id"] == session_id or s["topic"] not in topic_set:
+            continue
+        prior[s["topic"]] = s  # ordered oldest-first, so last prior wins
+    if not prior:
+        return "(no prior sessions — treat this as the baseline session)"
+    return "\n".join(
+        f"- {t}: previously '{s['signal']}' ({s['delivery']} delivery)"
+        for t, s in prior.items()
+    )

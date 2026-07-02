@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 
 from . import llm_client
-from .llm_client import LLMQuotaError
 from .schemas import Domain, GradingAssessment, GradingSignal
 
 _HEDGE_WORDS = ("i think", "maybe", "probably", "i'm not sure", "im not sure",
@@ -110,10 +109,10 @@ async def grade_answer(
     try:
         raw = await llm_client.generate(prompt, temperature=0.2, response_format="json")
         assessment = _parse_assessment(raw)
-    except (LLMQuotaError, ValueError, KeyError) as e:
-        # Quota exhausted or unparsable JSON -> heuristic fallback so the session
-        # never stalls. The signal is coarse but non-random; grader_confidence is
-        # kept low so the debrief can flag it.
+    except Exception:
+        # Quota/timeout/network/unparsable-JSON -> heuristic fallback so the
+        # session never stalls. Coarse but non-random; grader_confidence stays
+        # low so the debrief can flag it.
         assessment = _heuristic_assessment(transcript)
     return GradingSignal.from_assessment(
         assessment, session_id=session_id, topic=topic, domain=domain

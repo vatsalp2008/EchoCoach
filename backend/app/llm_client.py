@@ -44,7 +44,12 @@ def _get_client() -> genai.Client:
                 f"llm_client only wires 'gemini'; APP_LLM_PROVIDER={APP_LLM_PROVIDER!r}. "
                 "Add the provider branch here and nowhere else."
             )
-        _client = genai.Client(api_key=GEMINI_API_KEY or os.environ["GEMINI_API_KEY"])
+        # Bound each call so a slow/hanging request can't stall the interview;
+        # on quota (429) Gemini returns immediately anyway. timeout is in ms.
+        _client = genai.Client(
+            api_key=GEMINI_API_KEY or os.environ["GEMINI_API_KEY"],
+            http_options=types.HttpOptions(timeout=45_000),
+        )
     return _client
 
 

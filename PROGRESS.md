@@ -60,6 +60,20 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
    `llama3.1:8b` and `mistral:latest` fail cognee's structured graph extraction
    (`InstructorRetryException`) and take minutes per call. Cognee's cognify runs
    on **Gemini**; embeddings stay local on **fastembed**. Don't retry Ollama for cognify.
+8. **Cognee retries a 429 for up to 240s** (`retry_config.py`: `stop_after_attempt(2)
+   & stop_after_delay(240)`, not env-configurable). So NEVER `await` a cognify write
+   on the request path. Graph writes go through `memory.schedule_remember()` —
+   fire-and-forget, `asyncio.wait_for`-bounded (45s), and circuit-broken (300s cooldown
+   after a quota failure). `run_in_background=True` is NOT enough: it hides the
+   exception so the breaker can't trip and the retry storms pile up.
+
+## Hackathon compliance (don't lose points / get DQ'd)
+- **MUST disclose AI-assistant use (Claude Code) in the README** — non-disclosure is
+  an automatic disqualification. (Separate from our "no Claude in commit messages"
+  convention — commits stay clean, README discloses.)
+- Coding started within the event window (Jun 29–Jul 5 2026) ✅. Cognee powers memory ✅.
+  Self-hosted open-source track (MacBook) ✅. Teams own IP ✅.
+- Full rules/resources: `docs/` + wemakedevs.org/hackathons/cognee/rules|resources.
 
 ---
 
@@ -81,16 +95,18 @@ backend/.venv/bin/python backend/scripts/cognee_smoke_test.py
 ---
 
 ## 🚧 What's left (spec phases)
-- [~] **Phase 1 — core loop (text technical interview).** Backend + frontend
-      CODE COMPLETE: schemas (§4.2), question bank (§5.1), grading prompt (§5.2
-      verbatim), follow-up cap=2 (§5.3), no-feedback-leakage (§5.3a), session loop
-      (§5.4), first-session diagnostic (§5.5), debrief (§5.6), SQLite, FastAPI routes,
-      Next.js interview+debrief screens. **Quota-resilient**: every LLM/graph call
-      degrades gracefully (heuristic grading, template debrief, best-effort graph
-      writes) — verified by `scripts/test_fallbacks.py` (full session under simulated
-      total quota failure, passes). **Full happy-path e2e (`scripts/phase1_e2e.py`)
-      pending daily Gemini quota reset** — components individually verified (Phase 0
-      lifecycle + fallback test).
+- [x] **Phase 1 — core loop (text technical interview). VERIFIED END-TO-END.**
+      schemas (§4.2), question bank (§5.1), grading prompt (§5.2 verbatim), follow-up
+      cap=2 (§5.3), no-feedback-leakage (§5.3a), session loop (§5.4), first-session
+      diagnostic (§5.5), debrief (§5.6), SQLite, FastAPI routes, Next.js interview+
+      debrief screens. A full session (start → diagnostics + follow-ups → done →
+      debrief) runs over HTTP with real Gemini grading + a genuine coaching debrief
+      (`scripts/http_smoke.py`). **Quota-resilient**: LLM/graph calls degrade
+      gracefully — heuristic grading, template debrief, and graph writes that are
+      **fire-and-forget + time-bounded + circuit-broken** so cognify quota-retries
+      never hang a turn (`scripts/test_fallbacks.py` passes under simulated total
+      failure). Remaining Phase-1 nicety: session-2-routing assertion in
+      `scripts/phase1_e2e.py` (needs 2 real sessions; run when convenient).
 - [ ] **Phase 2 — behavioral domain + graph viz.** behavioral bank + grading prompt
       (§6.2 verbatim; delivery DOES affect signal here), `/api/graph`, react-force-graph.
 - [ ] **Phase 3 — external grounding.** Reddit (PRAW) + GitHub search → filter → `remember`

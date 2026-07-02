@@ -158,11 +158,10 @@ async def grade_and_remember(
     # Record to the local mirror FIRST — it's the reliable source of truth for
     # routing and the debrief. The graph write is best-effort on top.
     db.record_signal(sig.model_dump())
-    try:
-        # Cognee op: remember() -> writes the performance signal into topic:<slug>.
-        await memory.remember(_memory_text(sig), dataset_name=_topic_dataset(topic))
-    except Exception:
-        pass  # quota/cognify failure must not crash the interview; graph catches up later
+    # Cognee op: remember() -> writes the performance signal into topic:<slug>.
+    # Fire-and-forget: the turn never waits on cognify; routing/debrief read the
+    # synchronous db mirror. The write is time-bounded + breaker-aware inside memory.
+    memory.schedule_remember(_memory_text(sig), _topic_dataset(topic))
     return sig
 
 
@@ -224,15 +223,16 @@ async def _pick_next_topic(
     routing is reliable, honoring the recall result while never returning an
     already-mastered or already-asked topic.
     """
-    try:
-        # Real memory query — routes the session, and its text feeds debriefs.
-        await memory.recall(
-            "Which topics has the candidate struggled with or avoided and not "
-            "yet mastered? Rank the weakest first.",
-            top_k=10,
-        )
-    except Exception:
-        pass  # routing must survive a recall hiccup
+    if memory.llm_available():
+        try:
+            # Real memory query — routes the session, and its text feeds debriefs.
+            await memory.recall(
+                "Which topics has the candidate struggled with or avoided and not "
+                "yet mastered? Rank the weakest first.",
+                top_k=10,
+            )
+        except Exception:
+            pass  # routing must survive a recall hiccup; db mirror is the backstop
 
     # Latest signal per topic, from the graph's local mirror.
     latest: dict[str, dict] = {}
@@ -292,10 +292,7 @@ async def _force_struggled(session_id: str, topic: str, domain: Domain) -> None:
         follow_up_needed=False, follow_up_focus=None,
     )
     db.record_signal(sig.model_dump())
-    try:
-        await memory.remember(_memory_text(sig), dataset_name=_topic_dataset(topic))
-    except Exception:
-        pass  # graph write best-effort
+    memory.schedule_remember(_memory_text(sig), _topic_dataset(topic))  # fire-and-forget
 
 
 async def _maybe_forget(topic: str) -> None:

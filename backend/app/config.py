@@ -41,6 +41,18 @@ def configure_cognee() -> None:
     """
     import cognee
 
+    # Fail fast: cognee routes LLM calls through LiteLLM, whose default retry
+    # sleeps on a 429 (seconds of blocking backoff) stall the async event loop
+    # and hang the whole server. Disable retries so quota errors surface instantly
+    # and our fallbacks kick in.
+    try:
+        import litellm
+
+        litellm.num_retries = 0
+        litellm.request_timeout = 30
+    except Exception:
+        pass
+
     COGNEE_DATA_DIR.mkdir(parents=True, exist_ok=True)
     COGNEE_SYSTEM_DIR.mkdir(parents=True, exist_ok=True)
     cognee.config.data_root_directory(str(COGNEE_DATA_DIR))
