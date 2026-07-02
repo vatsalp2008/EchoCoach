@@ -146,6 +146,19 @@ def question_for_topic(topic: str) -> Question | None:
     return qs[0] if qs else None
 
 
+# Topics that are code-writing (DSA) — the UI shows a code editor for these.
+CODING_TOPICS: set[str] = {
+    "two_pointer",
+    "hashing_basics",
+    "binary_search",
+    "concurrency",
+}
+
+
+def is_coding(topic: str) -> bool:
+    return topic in CODING_TOPICS
+
+
 def all_topics(domain: str | None = None) -> list[str]:
     return sorted(
         {q["topic"] for q in ALL_QUESTIONS if domain is None or q["domain"] == domain}

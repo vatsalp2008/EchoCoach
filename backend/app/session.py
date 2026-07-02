@@ -21,6 +21,7 @@ from .question_bank import (
     DIAGNOSTIC_BY_DOMAIN,
     all_topics,
     get_question,
+    is_coding,
     question_for_topic,
 )
 from .schemas import (
@@ -105,7 +106,8 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
     }
     state["asked_topics"].append(q["topic"])
     return StartSessionResponse(
-        session_id=session_id, question_id=q["id"], topic=q["topic"], question=q["question"]
+        session_id=session_id, question_id=q["id"], topic=q["topic"],
+        question=q["question"], coding=is_coding(q["topic"]),
     )
 
 
@@ -143,7 +145,8 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
             "question": fu_text, "is_follow_up": True,
         }
         return AnswerResponse(
-            next_question_id=fu_id, topic=topic, question=fu_text, is_follow_up=True
+            next_question_id=fu_id, topic=topic, question=fu_text,
+            is_follow_up=True, coding=is_coding(topic),
         )
 
     if sig.follow_up_needed and not resolved and count >= FOLLOW_UP_CAP:
@@ -197,7 +200,8 @@ async def _advance(session_id: str, state: dict) -> AnswerResponse:
     }
     state["asked_topics"].append(q["topic"])
     return AnswerResponse(
-        next_question_id=q["id"], topic=q["topic"], question=q["question"], is_follow_up=False
+        next_question_id=q["id"], topic=q["topic"], question=q["question"],
+        is_follow_up=False, coding=is_coding(q["topic"]),
     )
 
 

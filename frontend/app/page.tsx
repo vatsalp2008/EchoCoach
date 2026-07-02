@@ -17,6 +17,7 @@ import {
   stopListening,
 } from "@/lib/speech";
 import Avatar from "@/components/Avatar";
+import CodeEditor from "@/components/CodeEditor";
 import { useProctor } from "@/lib/useProctor";
 
 type Phase = "setup" | "intro" | "interview" | "loading" | "debrief";
@@ -26,6 +27,7 @@ interface CurrentQ {
   topic: string;
   question: string;
   isFollowUp: boolean;
+  coding: boolean;
 }
 
 export default function Home() {
@@ -111,6 +113,7 @@ export default function Home() {
         topic: res.topic,
         question: res.question,
         isFollowUp: false,
+        coding: res.coding,
       });
       setQNumber(1);
       setPhase("interview");
@@ -149,6 +152,7 @@ export default function Home() {
         topic: res.topic!,
         question: res.question!,
         isFollowUp: res.is_follow_up,
+        coding: res.coding,
       });
       if (!res.is_follow_up) setQNumber((n) => n + 1);
       setPhase("interview");
@@ -384,18 +388,26 @@ export default function Home() {
             )}
 
             <p className="text-lg leading-relaxed">{current.question}</p>
-            <textarea
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              rows={voiceMode ? 5 : 8}
-              placeholder={voiceMode ? "Your spoken answer appears here…" : "Type your answer…"}
-              className={inputCls}
-            />
+
+            {current.coding ? (
+              <CodeEditor value={answer} onChange={setAnswer} />
+            ) : (
+              <textarea
+                value={answer}
+                onChange={(e) => setAnswer(e.target.value)}
+                rows={voiceMode ? 5 : 8}
+                placeholder={
+                  voiceMode ? "Your spoken answer appears here…" : "Type your answer…"
+                }
+                className={inputCls}
+              />
+            )}
+
             <div className="flex items-center gap-3">
               <button type="submit" className={primaryBtn} disabled={!answer.trim()}>
                 Submit answer
               </button>
-              {voiceMode && (
+              {voiceMode && !current.coding && (
                 <button
                   type="button"
                   onClick={toggleMic}

@@ -71,6 +71,7 @@ class StartSessionResponse(BaseModel):
     question_id: str
     topic: str
     question: str
+    coding: bool = False  # show a code editor for this question
 
 
 class AnswerRequest(BaseModel):
@@ -88,4 +89,5 @@ class AnswerResponse(BaseModel):
     topic: Optional[str] = None
     question: Optional[str] = None
     is_follow_up: bool = False
+    coding: bool = False
     done: bool = False

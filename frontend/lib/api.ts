@@ -10,6 +10,7 @@ export interface StartSessionResponse {
   question_id: string;
   topic: string;
   question: string;
+  coding: boolean;
 }
 
 export interface AnswerResponse {
@@ -17,6 +18,7 @@ export interface AnswerResponse {
   topic: string | null;
   question: string | null;
   is_follow_up: boolean;
+  coding: boolean;
   done: boolean;
 }
 
