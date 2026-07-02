@@ -4,6 +4,7 @@ import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   AnswerResponse,
+  Domain,
   getDebrief,
   startSession,
   submitAnswer,
@@ -22,6 +23,7 @@ export default function Home() {
   const [phase, setPhase] = useState<Phase>("setup");
   const [role, setRole] = useState("");
   const [company, setCompany] = useState("");
+  const [domain, setDomain] = useState<Domain>("technical");
   const [sessionId, setSessionId] = useState("");
   const [current, setCurrent] = useState<CurrentQ | null>(null);
   const [answer, setAnswer] = useState("");
@@ -43,6 +45,7 @@ export default function Home() {
       const res = await startSession({
         target_role: role.trim(),
         company: company.trim() || undefined,
+        domain_focus: domain,
       });
       setSessionId(res.session_id);
       setCurrent({
@@ -145,6 +148,28 @@ export default function Home() {
                 placeholder="e.g. Stripe"
                 className={inputCls}
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-1">
+                Interview type
+              </label>
+              <div className="inline-flex rounded-lg border border-neutral-300 p-0.5 bg-white">
+                {(["technical", "behavioral"] as Domain[]).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setDomain(d)}
+                    className={
+                      "rounded-md px-3 py-1.5 text-sm capitalize " +
+                      (domain === d
+                        ? "bg-neutral-900 text-white"
+                        : "text-neutral-600 hover:text-neutral-900")
+                    }
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
             </div>
             <button type="submit" className={primaryBtn} disabled={!role.trim()}>
               Continue

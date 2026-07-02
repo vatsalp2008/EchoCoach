@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 from . import db, llm_client, memory
 from .question_bank import (
-    DIAGNOSTIC_SEQUENCE,
+    DIAGNOSTIC_BY_DOMAIN,
     all_topics,
     get_question,
     question_for_topic,
@@ -74,11 +74,12 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
         target_role=req.target_role,
     )
 
-    first = _is_first_session()
+    first = _is_first_session(req.domain_focus)
+    diagnostic = DIAGNOSTIC_BY_DOMAIN.get(req.domain_focus, [])
     state = {
         "domain": req.domain_focus,
         "asked_topics": [],
-        "diagnostic_queue": list(DIAGNOSTIC_SEQUENCE) if first else [],
+        "diagnostic_queue": list(diagnostic) if first else [],
         "is_first_session": first,
         "current": None,
     }
@@ -205,10 +206,13 @@ async def _end(session_id: str) -> AnswerResponse:
 
 
 # ── routing / helpers ────────────────────────────────────────────────────────
-def _is_first_session() -> bool:
-    """No graded signals anywhere yet => first session, use the diagnostic set."""
+def _is_first_session(domain: Domain) -> bool:
+    """No graded signals yet in this domain => first session for it, so run that
+    domain's diagnostic set rather than routing from an empty history."""
     with db.connect() as conn:
-        n = conn.execute("SELECT COUNT(*) AS n FROM grading_signals").fetchone()["n"]
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM grading_signals WHERE domain=?", (domain,)
+        ).fetchone()["n"]
     return n == 0
 
 

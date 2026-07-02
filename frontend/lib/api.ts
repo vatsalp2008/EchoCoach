@@ -45,6 +45,27 @@ export function submitAnswer(input: {
   return post<AnswerResponse>("/api/answer", input);
 }
 
+export interface GraphNode {
+  id: string;
+  label: string;
+  domain: Domain;
+  signal: "mastered" | "partial" | "struggled" | "avoided" | "unassessed";
+  interactions: number;
+  last_seen: string | null;
+  archived: boolean;
+}
+
+export interface GraphData {
+  nodes: GraphNode[];
+  edges: { source: string; target: string }[];
+}
+
+export async function getGraph(): Promise<GraphData> {
+  const res = await fetch(`${API_BASE}/api/graph`);
+  if (!res.ok) throw new Error(`graph failed: ${res.status}`);
+  return res.json() as Promise<GraphData>;
+}
+
 export async function getDebrief(sessionId: string): Promise<string> {
   const res = await fetch(`${API_BASE}/api/session/${sessionId}/debrief`);
   if (!res.ok) throw new Error(`debrief failed: ${res.status}`);

@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import db, debrief, memory
+from . import db, debrief, graph_api, memory
 from .schemas import (
     AnswerRequest,
     AnswerResponse,
@@ -33,6 +33,9 @@ app.add_middleware(
 async def _startup() -> None:
     db.init_db()
     memory.init()  # configure Cognee's local stack + Gemini providers once
+
+
+app.include_router(graph_api.router)
 
 
 @app.get("/api/health")

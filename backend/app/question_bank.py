@@ -90,7 +90,46 @@ TECHNICAL: list[Question] = [
     },
 ]
 
-ALL_QUESTIONS: list[Question] = TECHNICAL
+# ── Behavioral (Phase 2): 5–6 questions, tagged by topic ─────────────────────
+BEHAVIORAL: list[Question] = [
+    {
+        "id": "beh_conflict",
+        "domain": "behavioral",
+        "topic": "conflict_story",
+        "question": "Tell me about a time you disagreed with a teammate on a technical decision. How did you handle it?",
+        "difficulty": "medium",
+    },
+    {
+        "id": "beh_failure",
+        "domain": "behavioral",
+        "topic": "failure_story",
+        "question": "Describe a project or decision that didn't go the way you hoped. What happened and what did you take from it?",
+        "difficulty": "medium",
+    },
+    {
+        "id": "beh_prioritization",
+        "domain": "behavioral",
+        "topic": "prioritization_story",
+        "question": "Tell me about a time you had far more to do than time allowed. How did you decide what to work on?",
+        "difficulty": "medium",
+    },
+    {
+        "id": "beh_leadership",
+        "domain": "behavioral",
+        "topic": "leadership_story",
+        "question": "Give me an example of a time you drove something forward without being asked or without formal authority.",
+        "difficulty": "medium",
+    },
+    {
+        "id": "beh_ambiguity",
+        "domain": "behavioral",
+        "topic": "ambiguity_story",
+        "question": "Tell me about a time you had to make progress on a problem that was poorly defined or kept changing.",
+        "difficulty": "medium",
+    },
+]
+
+ALL_QUESTIONS: list[Question] = TECHNICAL + BEHAVIORAL
 
 _BY_ID = {q["id"]: q for q in ALL_QUESTIONS}
 _BY_TOPIC: dict[str, list[Question]] = {}
@@ -113,9 +152,15 @@ def all_topics(domain: str | None = None) -> list[str]:
     )
 
 
-# First-session diagnostic order (spec 5.5): DSA -> system design -> project.
+# First-session diagnostic order per domain. Technical (spec 5.5): DSA ->
+# system design -> project. Behavioral: a spread across story types.
 DIAGNOSTIC_SEQUENCE: list[str] = [
     "tech_two_pointer",
     "tech_url_shortener",
     "tech_project_walkthrough",
 ]
+
+DIAGNOSTIC_BY_DOMAIN: dict[str, list[str]] = {
+    "technical": DIAGNOSTIC_SEQUENCE,
+    "behavioral": ["beh_conflict", "beh_failure", "beh_prioritization"],
+}
