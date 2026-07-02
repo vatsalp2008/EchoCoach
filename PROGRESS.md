@@ -1,7 +1,9 @@
 # EchoCoach — Build Progress (teammate reference)
 
 Living doc of **what's done** and **what's left**. Update it as you land work.
-Last verified: Phase 0 complete, full Cognee lifecycle passing.
+Last verified: core loop + Phase 2 + voice + code editor + whiteboard + proctoring
++ per-user profiles all working end-to-end; README + demo seed done. Only external
+grounding (Reddit/GitHub) and UI polish remain.
 
 ---
 
@@ -94,42 +96,68 @@ backend/.venv/bin/python backend/scripts/cognee_smoke_test.py
 
 ---
 
-## 🚧 What's left (spec phases)
-- [x] **Phase 1 — core loop (text technical interview). VERIFIED END-TO-END.**
-      schemas (§4.2), question bank (§5.1), grading prompt (§5.2 verbatim), follow-up
-      cap=2 (§5.3), no-feedback-leakage (§5.3a), session loop (§5.4), first-session
-      diagnostic (§5.5), debrief (§5.6), SQLite, FastAPI routes, Next.js interview+
-      debrief screens. A full session (start → diagnostics + follow-ups → done →
-      debrief) runs over HTTP with real Gemini grading + a genuine coaching debrief
-      (`scripts/http_smoke.py`). **Quota-resilient**: LLM/graph calls degrade
-      gracefully — heuristic grading, template debrief, and graph writes that are
-      **fire-and-forget + time-bounded + circuit-broken** so cognify quota-retries
-      never hang a turn (`scripts/test_fallbacks.py` passes under simulated total
-      failure). Remaining Phase-1 nicety: session-2-routing assertion in
-      `scripts/phase1_e2e.py` (needs 2 real sessions; run when convenient).
-- [ ] **Phase 2 — behavioral domain + graph viz.** behavioral bank + grading prompt
-      (§6.2 verbatim; delivery DOES affect signal here), `/api/graph`, react-force-graph.
-- [ ] **Phase 3 — external grounding.** Reddit (PRAW) + GitHub search → filter → `remember`
-      into `company_context:<slug>` in background, poll `get_status`, fallback-first,
-      never block UI. (Reddit/GitHub creds coming.)
-- [ ] **Phase 4 — voice + avatar.** Web Speech STT/TTS behind a `speech.ts` interface,
-      volume-driven avatar. **Wrapper only — text loop stays reachable via toggle.**
-- [ ] **Phase 5 — demo readiness.** seed script (real pipeline), README, rehearsals.
+## ✅ Done (verified end-to-end)
+- [x] **Core loop (Phase 1).** schemas (§4.2), question bank (§5.1), grading prompts
+      (§5.2 verbatim), follow-up cap=2 (§5.3), no-feedback-leakage (§5.3a), session
+      loop (§5.4), first-session diagnostic (§5.5), debrief (§5.6, short + markdown),
+      SQLite, FastAPI. Full session over HTTP with real Gemini (`scripts/http_smoke.py`).
+- [x] **Quota resilience.** heuristic grading + template debrief + graph writes that are
+      fire-and-forget / time-bounded / circuit-broken so cognify quota-retries never hang
+      a turn (`scripts/test_fallbacks.py` passes under total simulated failure).
+- [x] **Behavioral domain + Full mode (Phase 2).** behavioral bank + rubric (§6.2 verbatim,
+      delivery affects signal); technical/behavioral/**full** session modes.
+- [x] **Weakness-graph viz.** `/api/graph` + `react-force-graph-2d` at `/graph`, colored by signal.
+- [x] **Per-user profiles.** username scopes the memory graph (datasets `topic:<user>:<slug>`,
+      signals filtered by user, `/api/graph?user=`).
+- [x] **Voice + avatar (Phase 4).** `lib/speech.ts` (Web Speech STT/TTS) + pulsing `Avatar`;
+      text stays the fallback via a toggle. Chrome-only for voice.
+- [x] **Code editor.** Monaco for DSA topics (backend `coding` flag).
+- [x] **Whiteboard.** sketch → base64 PNG → **Gemini vision grading** (verified working).
+- [x] **Proctoring.** tab-switch / blur / fullscreen-exit detection, warnings + tally.
+- [x] **Demo readiness.** `README.md` (incl. mandatory AI-disclosure + How-we-used-Cognee),
+      `docs/DECISIONS.md`, `scripts/seed_sessions.py` (seeds a shaped demo graph — run
+      `seed_sessions.py demo`, then log in as `demo` and open `/graph`).
+
+## 🚧 Remaining
+- [ ] **External grounding (Phase 3).** Reddit (PRAW) + GitHub → filter → `remember` into
+      `company_context:<slug>` in background, poll `get_status`, fallback-first. **The
+      company field on the setup screen is currently inert** until this lands. Creds guide:
+      `docs/reddit_api_setup.md`.
+- [ ] **UI polish pass** (deferred by decision — do after core features).
+- [ ] **Rehearsals** — 2 full run-throughs in Chrome before submission.
+- [ ] (nicety) `scripts/phase1_e2e.py` 2-session routing assertion when convenient.
 
 ---
 
 ## File map (current)
 ```
+README.md                    story, architecture, How-we-used-Cognee, AI disclosure
 echocoach_build_spec.md      full spec
 PROGRESS.md                  this file
+docs/DECISIONS.md            ADR log (with tradeoffs)
+docs/reddit_api_setup.md     Phase 3 creds guide
 .env.example / .env          env template / real secrets (gitignored)
 backend/
   requirements.txt
   app/
-    config.py                env load + cognee local/Gemini config  ✅
-    memory.py                 the ONLY cognee wrapper                ✅
-    (llm_client, schemas, grading, session, debrief, question_bank, db, graph_api, grounding/ — Phase 1+)
+    config.py                env load + cognee local/Gemini config
+    memory.py                the ONLY cognee wrapper (remember/recall/improve/forget + breaker)
+    llm_client.py            Gemini adapter (JSON + multimodal image; quota detection)
+    grading.py               technical + behavioral rubrics (verbatim) + heuristic fallback
+    session.py               loop, follow-up cap, routing, mastery, per-user, full mode
+    debrief.py               concise end-of-session report (+ template fallback)
+    question_bank.py         technical + behavioral banks; coding topics; diagnostics
+    db.py                    SQLite: sessions, follow_up_counters, question_bank, signals
+    graph_api.py             /api/graph nodes+edges (per-user)
+    schemas.py               pydantic (grading signal, API models)
   scripts/
-    cognee_smoke_test.py     Phase 0 gate + API introspection        ✅
-frontend/                    Next.js (Phase 1+)
+    cognee_smoke_test.py     Phase 0 gate + API introspection
+    http_smoke.py            drive a full session over HTTP
+    test_fallbacks.py        quota-resilience test
+    seed_sessions.py         seed a shaped demo graph
+    phase1_e2e.py            (nicety) 2-session routing assertion
+frontend/
+  app/            page.tsx (interview: setup→intro→interview→debrief), graph/page.tsx, layout (nav)
+  components/     Avatar, CodeEditor, Whiteboard, WeaknessGraph
+  lib/            api.ts, speech.ts, useProctor.ts
 ```
