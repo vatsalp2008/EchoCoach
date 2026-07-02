@@ -12,7 +12,7 @@ import os
 from google import genai
 from google.genai import types
 
-from .config import APP_LLM_MODEL, GEMINI_API_KEY, LLM_PROVIDER
+from .config import APP_LLM_MODEL, APP_LLM_PROVIDER, GEMINI_API_KEY
 
 _client: genai.Client | None = None
 
@@ -20,9 +20,9 @@ _client: genai.Client | None = None
 def _get_client() -> genai.Client:
     global _client
     if _client is None:
-        if LLM_PROVIDER != "gemini":
+        if APP_LLM_PROVIDER != "gemini":
             raise NotImplementedError(
-                f"llm_client only wires 'gemini'; LLM_PROVIDER={LLM_PROVIDER!r}. "
+                f"llm_client only wires 'gemini'; APP_LLM_PROVIDER={APP_LLM_PROVIDER!r}. "
                 "Add the provider branch here and nowhere else."
             )
         _client = genai.Client(api_key=GEMINI_API_KEY or os.environ["GEMINI_API_KEY"])

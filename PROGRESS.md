@@ -52,12 +52,14 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
    dataset at session end, not bare, or it 404s on an empty graph.
 5. If a run crashes mid-op you may leave a stray Kuzu worker holding a lock:
    `pkill -9 -f cognee_db_workers` then delete `backend/.cognee_data` + `backend/.cognee_system`.
-6. **⚠️ LLM quota (current blocker):** the Gemini key in use is on a free tier
-   capped at **~20 requests/day** for `gemini-2.5-flash-lite`. Cognee's `cognify`
-   makes several LLM calls per `remember()`, so one full session exhausts it.
-   Resolution pending (standard AI Studio `AIza…` key with higher RPD, and/or
-   routing Cognee's LLM to local Ollama). Backend logic is written & imports
-   clean; end-to-end run is blocked only by this quota.
+6. **⚠️ Need a standard AIza Gemini key (current blocker).** The key in use
+   (`AQ.…`) is capped at **~20 requests/day** — exhausted instantly. Get a normal
+   AI Studio key (`AIza…`, ~1000/day free) at aistudio.google.com/apikey and put
+   it in `.env` as `GEMINI_API_KEY` and `LLM_API_KEY`.
+7. **Local Ollama for cognify does NOT work** (tested, see ADR-011). Both
+   `llama3.1:8b` and `mistral:latest` fail cognee's structured graph extraction
+   (`InstructorRetryException`) and take minutes per call. Cognee's cognify runs
+   on **Gemini**; embeddings stay local on **fastembed**. Don't retry Ollama for cognify.
 
 ---
 

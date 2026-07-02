@@ -16,8 +16,11 @@ BACKEND_ROOT = REPO_ROOT / "backend"
 # Cognee reads several settings from env on import, so load .env first.
 load_dotenv(REPO_ROOT / ".env")
 
-# ── App-level settings (used by llm_client.py, db.py) ───────────────────────
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
+# ── App-level LLM (grading + debrief), used by llm_client.py ────────────────
+# Kept SEPARATE from Cognee's LLM: the app talks to Gemini directly for quality
+# grading, while Cognee's cognify/recall/improve run on a local model (Ollama)
+# to avoid burning the app's API quota. The two never share provider settings.
+APP_LLM_PROVIDER = os.getenv("APP_LLM_PROVIDER", "gemini")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 APP_LLM_MODEL = os.getenv("APP_LLM_MODEL", "gemini-2.5-flash")
 
@@ -51,25 +54,27 @@ def configure_cognee() -> None:
     cognee.config.set_vector_db_subprocess_enabled(False)
 
     # LLM used by Cognee's internal cognify (entity/relation extraction).
-    cognee.config.set_llm_provider(os.getenv("LLM_PROVIDER", "gemini"))
+    # Gemini: local Ollama models fail cognee's structured-output extraction and
+    # take minutes per call (see ADR-011), so graph-building runs on Gemini.
+    cognee_provider = os.getenv("LLM_PROVIDER", "gemini")
+    cognee.config.set_llm_provider(cognee_provider)
     cognee.config.set_llm_model(os.getenv("LLM_MODEL", "gemini/gemini-2.5-flash-lite"))
     cognee.config.set_llm_api_key(os.getenv("LLM_API_KEY") or GEMINI_API_KEY)
-    # NOTE: do NOT set a custom endpoint for the "gemini" provider — LiteLLM
-    # routes gemini/* natively, and overriding LLM_ENDPOINT makes the connection
-    # test hang (cognee issue #1530). Only honor it for other providers.
-    if os.getenv("LLM_ENDPOINT") and os.getenv("LLM_PROVIDER", "gemini") != "gemini":
+    # gemini must NOT get a custom endpoint (overriding it hangs the connection
+    # test — cognee issue #1530). Honor LLM_ENDPOINT only for other providers.
+    if os.getenv("LLM_ENDPOINT") and cognee_provider != "gemini":
         cognee.config.set_llm_endpoint(os.getenv("LLM_ENDPOINT"))
 
-    # Embeddings. fastembed is the local, key-free fallback if Gemini embeddings
-    # misbehave — set EMBEDDING_PROVIDER=fastembed in .env to switch.
-    emb_provider = os.getenv("EMBEDDING_PROVIDER", "gemini")
+    # Embeddings. Default is local fastembed (in-process, no key). Cognee's
+    # config validation requires provider+model+dimensions together, so always
+    # set all three; only remote providers need an API key.
+    emb_provider = os.getenv("EMBEDDING_PROVIDER", "fastembed")
     cognee.config.set_embedding_provider(emb_provider)
-    if emb_provider != "fastembed":
-        cognee.config.set_embedding_model(
-            os.getenv("EMBEDDING_MODEL", "gemini/gemini-embedding-001")
-        )
-        if os.getenv("EMBEDDING_DIMENSIONS"):
-            cognee.config.set_embedding_dimensions(int(os.getenv("EMBEDDING_DIMENSIONS")))
+    cognee.config.set_embedding_model(
+        os.getenv("EMBEDDING_MODEL", "BAAI/bge-small-en-v1.5")
+    )
+    cognee.config.set_embedding_dimensions(int(os.getenv("EMBEDDING_DIMENSIONS", "384")))
+    if emb_provider not in ("fastembed", "ollama"):
         cognee.config.set_embedding_api_key(
             os.getenv("EMBEDDING_API_KEY") or GEMINI_API_KEY
         )

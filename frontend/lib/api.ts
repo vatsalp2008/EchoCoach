@@ -1,0 +1,53 @@
+// Thin client for the EchoCoach backend. Base URL is overridable via
+// NEXT_PUBLIC_API_BASE; defaults to the local FastAPI dev server.
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+
+export type Domain = "technical" | "behavioral";
+
+export interface StartSessionResponse {
+  session_id: string;
+  question_id: string;
+  topic: string;
+  question: string;
+}
+
+export interface AnswerResponse {
+  next_question_id: string | null;
+  topic: string | null;
+  question: string | null;
+  is_follow_up: boolean;
+  done: boolean;
+}
+
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+export function startSession(input: {
+  target_role: string;
+  company?: string;
+  domain_focus?: Domain;
+}) {
+  return post<StartSessionResponse>("/api/session", input);
+}
+
+export function submitAnswer(input: {
+  session_id: string;
+  question_id: string;
+  transcript: string;
+}) {
+  return post<AnswerResponse>("/api/answer", input);
+}
+
+export async function getDebrief(sessionId: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/session/${sessionId}/debrief`);
+  if (!res.ok) throw new Error(`debrief failed: ${res.status}`);
+  const data = (await res.json()) as { debrief: string };
+  return data.debrief;
+}
