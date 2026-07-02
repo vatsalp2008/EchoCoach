@@ -245,7 +245,9 @@ async def _pick_next_topic(
     for topic, s in latest.items():
         if topic in asked or s["signal"] == "mastered":
             continue
-        candidates.append((_SEVERITY.get(s["signal"], 1), s["created_at"], topic))
+        # payload uses 'timestamp' (GradingSignal); the db column 'created_at'
+        # isn't part of the stored JSON.
+        candidates.append((_SEVERITY.get(s["signal"], 1), s["timestamp"], topic))
 
     if candidates:
         candidates.sort(reverse=True)  # highest severity, then most recent
