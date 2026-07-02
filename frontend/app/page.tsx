@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   AnswerResponse,
@@ -9,6 +9,14 @@ import {
   startSession,
   submitAnswer,
 } from "@/lib/api";
+import {
+  cancelSpeak,
+  speak,
+  speechSupported,
+  startListening,
+  stopListening,
+} from "@/lib/speech";
+import Avatar from "@/components/Avatar";
 
 type Phase = "setup" | "intro" | "interview" | "loading" | "debrief";
 
@@ -25,18 +33,56 @@ export default function Home() {
   const [role, setRole] = useState("");
   const [company, setCompany] = useState("");
   const [domain, setDomain] = useState<SessionMode>("technical");
-
-  // Load the saved profile name on the client (localStorage isn't available at SSR).
-  useEffect(() => {
-    const saved = localStorage.getItem("echocoach_user");
-    if (saved) setUsername(saved);
-  }, []);
   const [sessionId, setSessionId] = useState("");
   const [current, setCurrent] = useState<CurrentQ | null>(null);
   const [answer, setAnswer] = useState("");
   const [qNumber, setQNumber] = useState(0);
   const [debrief, setDebrief] = useState("");
   const [error, setError] = useState("");
+
+  // Voice layer (additive; text stays the fallback).
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [voiceAvail, setVoiceAvail] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [bump, setBump] = useState(0);
+  const spokenFor = useRef<string>("");
+
+  // Load the saved profile name + feature-detect speech on the client.
+  useEffect(() => {
+    const saved = localStorage.getItem("echocoach_user");
+    if (saved) setUsername(saved);
+    setVoiceAvail(speechSupported());
+  }, []);
+
+  // In voice mode, the interviewer speaks each new question exactly once.
+  useEffect(() => {
+    if (phase !== "interview" || !voiceMode || !current) return;
+    if (spokenFor.current === current.questionId) return;
+    spokenFor.current = current.questionId;
+    speak(current.question, {
+      onStart: () => setSpeaking(true),
+      onBoundary: () => setBump((b) => b + 1),
+      onEnd: () => setSpeaking(false),
+    });
+  }, [phase, voiceMode, current]);
+
+  function toggleMic() {
+    if (listening) {
+      stopListening();
+      setListening(false);
+      return;
+    }
+    cancelSpeak();
+    setSpeaking(false);
+    const ok = startListening({
+      onInterim: (t) => setAnswer(t),
+      onFinal: (t) => t && setAnswer(t),
+      onError: (m) => setError(m),
+      onEnd: () => setListening(false),
+    });
+    setListening(ok);
+  }
 
   function beginIntro(e: React.FormEvent) {
     e.preventDefault();
@@ -75,6 +121,10 @@ export default function Home() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!current || !answer.trim()) return;
+    stopListening();
+    setListening(false);
+    cancelSpeak();
+    setSpeaking(false);
     setError("");
     setPhase("loading");
     try {
@@ -105,6 +155,11 @@ export default function Home() {
   }
 
   function reset() {
+    cancelSpeak();
+    stopListening();
+    setSpeaking(false);
+    setListening(false);
+    spokenFor.current = "";
     setPhase("setup");
     setRole("");
     setCompany("");
@@ -249,30 +304,105 @@ export default function Home() {
 
         {phase === "interview" && current && (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="flex items-center gap-2 text-xs text-neutral-500">
-              <span className="rounded-full bg-neutral-200 px-2 py-0.5">
-                Question {qNumber}
-              </span>
-              <span className="rounded-full bg-neutral-200 px-2 py-0.5">
-                {current.topic.replace(/_/g, " ")}
-              </span>
-              {current.isFollowUp && (
-                <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5">
-                  follow-up
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs text-neutral-500">
+                <span className="rounded-full bg-neutral-200 px-2 py-0.5">
+                  Question {qNumber}
                 </span>
+                <span className="rounded-full bg-neutral-200 px-2 py-0.5">
+                  {current.topic.replace(/_/g, " ")}
+                </span>
+                {current.isFollowUp && (
+                  <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5">
+                    follow-up
+                  </span>
+                )}
+              </div>
+              {voiceAvail && (
+                <div className="inline-flex rounded-lg border border-neutral-300 p-0.5 bg-white text-xs">
+                  {[
+                    ["text", "Text"],
+                    ["voice", "Voice"],
+                  ].map(([m, label]) => {
+                    const active = (m === "voice") === voiceMode;
+                    return (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => {
+                          const v = m === "voice";
+                          setVoiceMode(v);
+                          if (!v) {
+                            cancelSpeak();
+                            stopListening();
+                            setSpeaking(false);
+                            setListening(false);
+                          } else {
+                            // let the effect speak the current question
+                            spokenFor.current = "";
+                          }
+                        }}
+                        className={
+                          "rounded-md px-2.5 py-1 " +
+                          (active
+                            ? "bg-neutral-900 text-white"
+                            : "text-neutral-600 hover:text-neutral-900")
+                        }
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               )}
             </div>
+
+            {voiceMode && (
+              <Avatar speaking={speaking} listening={listening} bump={bump} />
+            )}
+
             <p className="text-lg leading-relaxed">{current.question}</p>
             <textarea
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
-              rows={8}
-              placeholder="Type your answer…"
+              rows={voiceMode ? 5 : 8}
+              placeholder={voiceMode ? "Your spoken answer appears here…" : "Type your answer…"}
               className={inputCls}
             />
-            <button type="submit" className={primaryBtn} disabled={!answer.trim()}>
-              Submit answer
-            </button>
+            <div className="flex items-center gap-3">
+              <button type="submit" className={primaryBtn} disabled={!answer.trim()}>
+                Submit answer
+              </button>
+              {voiceMode && (
+                <button
+                  type="button"
+                  onClick={toggleMic}
+                  className={
+                    "rounded-lg px-4 py-2 text-sm font-medium border " +
+                    (listening
+                      ? "border-red-300 bg-red-50 text-red-700"
+                      : "border-neutral-300 text-neutral-700 hover:bg-neutral-100")
+                  }
+                >
+                  {listening ? "◼ Stop" : "🎤 Speak"}
+                </button>
+              )}
+              {voiceMode && current && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    speak(current.question, {
+                      onStart: () => setSpeaking(true),
+                      onBoundary: () => setBump((b) => b + 1),
+                      onEnd: () => setSpeaking(false),
+                    })
+                  }
+                  className="text-xs text-neutral-500 hover:text-neutral-800"
+                >
+                  replay question
+                </button>
+              )}
+            </div>
           </form>
         )}
 
