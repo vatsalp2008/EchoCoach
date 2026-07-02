@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 
 from . import db, llm_client, memory
+from .llm_client import LLMQuotaError
 
 _DEBRIEF_PROMPT = """You are an expert interview coach writing a candidate's end-of-session debrief.
 Speak directly to the candidate in second person ("you"). Be specific, warm, and honest.
@@ -61,7 +62,42 @@ async def generate_debrief(session_id: str) -> str:
         questions=json.dumps(questions, indent=2),
         prior=prior,
     )
-    return await llm_client.generate(prompt, temperature=0.4)
+    try:
+        return await llm_client.generate(prompt, temperature=0.4)
+    except LLMQuotaError:
+        return _template_debrief(signals, questions)
+
+
+def _template_debrief(signals: list[dict], questions: dict[str, str]) -> str:
+    """No-LLM debrief built directly from the graded signals — used when the LLM
+    is quota-exhausted so the candidate still gets a usable report."""
+    # Latest signal per topic.
+    latest: dict[str, dict] = {}
+    for s in signals:
+        latest[s["topic"]] = s
+    weak = [t for t, s in latest.items() if s["signal"] in ("struggled", "avoided")]
+    strong = [t for t, s in latest.items() if s["signal"] == "mastered"]
+
+    lines = ["## Topics covered this session"]
+    for topic, s in latest.items():
+        q = questions.get(topic, topic)
+        lines.append(
+            f"- **{topic.replace('_', ' ')}** — {s['signal']} "
+            f"({s['delivery']} delivery). {s.get('evidence', '')}"
+        )
+    lines += ["", "## Progress since last session",
+              "_(Detailed synthesis unavailable right now — LLM quota reached. "
+              "This is a summary built directly from your graded answers.)_"]
+    lines += ["", "## What's still weak"]
+    lines += [f"- {t.replace('_', ' ')}" for t in weak] or ["- Nothing flagged as weak this session."]
+    lines += ["", "## What's coming next"]
+    if weak:
+        lines.append(f"Next session will likely press on: {', '.join(t.replace('_', ' ') for t in weak)}.")
+    else:
+        lines.append("Next session will introduce new topics and revisit anything not yet mastered.")
+    if strong:
+        lines.append(f"\nYou showed strength on: {', '.join(t.replace('_', ' ') for t in strong)}.")
+    return "\n".join(lines)
 
 
 def get_question_text(topic: str) -> str | None:

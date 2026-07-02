@@ -155,9 +155,14 @@ async def grade_and_remember(
         session_id=session_id, topic=topic, domain=domain,
         question=question, transcript=transcript,
     )
-    # Cognee op: remember() -> writes the performance signal into topic:<slug>.
-    await memory.remember(_memory_text(sig), dataset_name=_topic_dataset(topic))
+    # Record to the local mirror FIRST — it's the reliable source of truth for
+    # routing and the debrief. The graph write is best-effort on top.
     db.record_signal(sig.model_dump())
+    try:
+        # Cognee op: remember() -> writes the performance signal into topic:<slug>.
+        await memory.remember(_memory_text(sig), dataset_name=_topic_dataset(topic))
+    except Exception:
+        pass  # quota/cognify failure must not crash the interview; graph catches up later
     return sig
 
 
@@ -269,7 +274,11 @@ async def _generate_follow_up(
         "score, correction, or whether they were right or wrong. Return only the "
         "question text, nothing else."
     )
-    return (await llm_client.generate(prompt, temperature=0.4)).strip()
+    try:
+        return (await llm_client.generate(prompt, temperature=0.4)).strip()
+    except Exception:
+        # Quota/LLM failure: a neutral hardcoded probe keeps the follow-up flow alive.
+        return f"Can you go a level deeper — specifically, {focus_line}?"
 
 
 async def _force_struggled(session_id: str, topic: str, domain: Domain) -> None:
@@ -282,8 +291,11 @@ async def _force_struggled(session_id: str, topic: str, domain: Domain) -> None:
         reasoning="Unresolved after the follow-up cap — recorded as a real struggle signal.",
         follow_up_needed=False, follow_up_focus=None,
     )
-    await memory.remember(_memory_text(sig), dataset_name=_topic_dataset(topic))
     db.record_signal(sig.model_dump())
+    try:
+        await memory.remember(_memory_text(sig), dataset_name=_topic_dataset(topic))
+    except Exception:
+        pass  # graph write best-effort
 
 
 async def _maybe_forget(topic: str) -> None:

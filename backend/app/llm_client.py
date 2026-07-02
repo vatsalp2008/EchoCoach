@@ -14,6 +14,25 @@ from google.genai import types
 
 from .config import APP_LLM_MODEL, APP_LLM_PROVIDER, GEMINI_API_KEY
 
+
+class LLMQuotaError(RuntimeError):
+    """Raised when the provider rejects a call for quota/rate-limit reasons.
+
+    Callers catch this to fall back to hardcoded/heuristic behavior so the
+    interview never crashes on an exhausted free-tier quota."""
+
+
+def _is_quota_error(exc: Exception) -> bool:
+    s = str(exc).lower()
+    return (
+        "resource_exhausted" in s
+        or "429" in s
+        or "quota" in s
+        or "rate limit" in s
+        or "ratelimit" in s
+    )
+
+
 _client: genai.Client | None = None
 
 
@@ -57,4 +76,9 @@ async def generate(
         )
         return (resp.text or "").strip()
 
-    return await anyio.to_thread.run_sync(_call)
+    try:
+        return await anyio.to_thread.run_sync(_call)
+    except Exception as e:
+        if _is_quota_error(e):
+            raise LLMQuotaError(str(e)) from e
+        raise

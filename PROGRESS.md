@@ -81,12 +81,16 @@ backend/.venv/bin/python backend/scripts/cognee_smoke_test.py
 ---
 
 ## 🚧 What's left (spec phases)
-- [~] **Phase 1 — core loop (text technical interview).** Backend CODE COMPLETE:
-      schemas (grading JSON §4.2), question bank (§5.1), technical grading prompt
-      (§5.2 verbatim), follow-up cap=2 (§5.3), no-feedback-leakage (§5.3a), session
-      loop (§5.4), first-session diagnostic (§5.5), debrief (§5.6), SQLite bookkeeping,
-      FastAPI routes. **End-to-end verification BLOCKED on the LLM quota (gotcha #6).**
-      Test harness: `backend/scripts/phase1_e2e.py`. Minimal text-only frontend: TODO.
+- [~] **Phase 1 — core loop (text technical interview).** Backend + frontend
+      CODE COMPLETE: schemas (§4.2), question bank (§5.1), grading prompt (§5.2
+      verbatim), follow-up cap=2 (§5.3), no-feedback-leakage (§5.3a), session loop
+      (§5.4), first-session diagnostic (§5.5), debrief (§5.6), SQLite, FastAPI routes,
+      Next.js interview+debrief screens. **Quota-resilient**: every LLM/graph call
+      degrades gracefully (heuristic grading, template debrief, best-effort graph
+      writes) — verified by `scripts/test_fallbacks.py` (full session under simulated
+      total quota failure, passes). **Full happy-path e2e (`scripts/phase1_e2e.py`)
+      pending daily Gemini quota reset** — components individually verified (Phase 0
+      lifecycle + fallback test).
 - [ ] **Phase 2 — behavioral domain + graph viz.** behavioral bank + grading prompt
       (§6.2 verbatim; delivery DOES affect signal here), `/api/graph`, react-force-graph.
 - [ ] **Phase 3 — external grounding.** Reddit (PRAW) + GitHub search → filter → `remember`

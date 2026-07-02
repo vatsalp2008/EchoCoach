@@ -9,7 +9,13 @@ from __future__ import annotations
 import json
 
 from . import llm_client
+from .llm_client import LLMQuotaError
 from .schemas import Domain, GradingAssessment, GradingSignal
+
+_HEDGE_WORDS = ("i think", "maybe", "probably", "i'm not sure", "im not sure",
+                "i guess", "kind of", "sort of", "not sure")
+_DODGE_MARKERS = ("no idea", "don't know", "dont know", "not sure", "skip",
+                  "pass", "can't answer", "cant answer")
 
 # The JSON schema the grader must return (spec 4.2). Shown to the model as-is;
 # the app overrides session_id/timestamp/topic/domain authoritatively after.
@@ -101,8 +107,14 @@ async def grade_answer(
     prompt = _PROMPTS[domain].format(
         topic=topic, question=question, transcript=transcript, schema=_SCHEMA
     )
-    raw = await llm_client.generate(prompt, temperature=0.2, response_format="json")
-    assessment = _parse_assessment(raw)
+    try:
+        raw = await llm_client.generate(prompt, temperature=0.2, response_format="json")
+        assessment = _parse_assessment(raw)
+    except (LLMQuotaError, ValueError, KeyError) as e:
+        # Quota exhausted or unparsable JSON -> heuristic fallback so the session
+        # never stalls. The signal is coarse but non-random; grader_confidence is
+        # kept low so the debrief can flag it.
+        assessment = _heuristic_assessment(transcript)
     return GradingSignal.from_assessment(
         assessment, session_id=session_id, topic=topic, domain=domain
     )
@@ -113,3 +125,28 @@ def _parse_assessment(raw: str) -> GradingAssessment:
     app supplies session_id/timestamp/topic/domain."""
     data = json.loads(raw)
     return GradingAssessment.model_validate(data)
+
+
+def _heuristic_assessment(transcript: str) -> GradingAssessment:
+    """No-LLM fallback grade from transcript text alone. Coarse but deterministic:
+    empty/dodging -> avoided; very short -> struggled; long+specific -> partial.
+    Never claims 'mastered' without a real grade."""
+    t = transcript.strip().lower()
+    words = t.split()
+    hedges = sum(t.count(h) for h in _HEDGE_WORDS)
+    if not words or any(m in t for m in _DODGE_MARKERS):
+        signal, focus = "avoided", "attempt the question at all"
+    elif len(words) < 20:
+        signal, focus = "struggled", "give a fuller, more concrete answer"
+    else:
+        signal, focus = "partial", "cover tradeoffs and edge cases"
+    delivery = "hedgy" if hedges >= 2 else ("vague" if len(words) < 20 else "direct")
+    return GradingAssessment(
+        signal=signal,
+        grader_confidence=0.3,  # low: this is a heuristic, not a real grade
+        delivery=delivery,
+        evidence="Graded heuristically (LLM unavailable/quota) from answer length and phrasing.",
+        reasoning="Fallback grade; the model was unavailable, so this is a coarse text-based estimate.",
+        follow_up_needed=signal in ("struggled", "avoided"),
+        follow_up_focus=focus,
+    )
