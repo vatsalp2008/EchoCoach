@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import auth, db, debrief, graph_api, memory
+from . import auth, db, debrief, graph_api, memory, stt
 from .schemas import (
     AnswerRequest,
     AnswerResponse,
@@ -18,6 +18,8 @@ from .schemas import (
     LoginResponse,
     StartSessionRequest,
     StartSessionResponse,
+    TranscribeRequest,
+    TranscribeResponse,
 )
 from . import session as session_mod
 
@@ -35,6 +37,7 @@ app.add_middleware(
 async def _startup() -> None:
     db.init_db()
     memory.init()  # configure Cognee's local stack + Gemini providers once
+    stt.warm_up()  # load the local Whisper model once; self-guards against failure
 
 
 app.include_router(graph_api.router)
@@ -76,3 +79,19 @@ async def answer(req: AnswerRequest) -> AnswerResponse:
 async def get_debrief(session_id: str) -> dict:
     report = await debrief.generate_debrief(session_id)
     return {"session_id": session_id, "debrief": report}
+
+
+@app.get("/api/stt/status")
+async def stt_status() -> dict:
+    """Lets the frontend feature-detect server-side Whisper, same idea as the
+    client's own speechSupported() check for the browser engine."""
+    return stt.status()
+
+
+@app.post("/api/transcribe", response_model=TranscribeResponse)
+async def transcribe(req: TranscribeRequest) -> TranscribeResponse:
+    try:
+        text = await stt.transcribe_b64(req.audio_b64, fmt=req.format)
+    except stt.SttUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return TranscribeResponse(transcript=text)

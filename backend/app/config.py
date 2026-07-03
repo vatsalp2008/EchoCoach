@@ -27,6 +27,13 @@ APP_LLM_MODEL = os.getenv("APP_LLM_MODEL", "gemini-2.5-flash")
 # App bookkeeping DB (NOT the memory graph — that lives inside Cognee).
 SQLITE_PATH = BACKEND_ROOT / "echocoach.db"
 
+# ── Server-side speech-to-text (Whisper via MLX) ─────────────────────────────
+# Additive to the browser's Web Speech API (frontend/lib/speech.ts) — never a
+# replacement. Swappable via env with no code change (e.g. drop to
+# "mlx-community/whisper-small.en" if turbo-q4 is too slow/large on a given machine).
+ENABLE_WHISPER_STT = os.getenv("ENABLE_WHISPER_STT", "1") != "0"
+WHISPER_MODEL_REPO = os.getenv("WHISPER_MODEL_REPO", "mlx-community/whisper-large-v3-turbo-q4")
+
 # Keep Cognee's stores inside the repo (gitignored), not in site-packages.
 COGNEE_DATA_DIR = BACKEND_ROOT / ".cognee_data"
 COGNEE_SYSTEM_DIR = BACKEND_ROOT / ".cognee_system"

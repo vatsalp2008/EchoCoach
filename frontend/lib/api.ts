@@ -110,3 +110,17 @@ export async function getDebrief(sessionId: string): Promise<string> {
   const data = (await res.json()) as { debrief: string };
   return data.debrief;
 }
+
+export interface TranscribeResponse {
+  transcript: string;
+}
+
+export function transcribeAudio(audio_b64: string, format = "webm") {
+  return post<TranscribeResponse>("/api/transcribe", { audio_b64, format });
+}
+
+export async function sttStatus(): Promise<{ available: boolean; model: string }> {
+  const res = await fetch(`${API_BASE}/api/stt/status`);
+  if (!res.ok) throw new Error(`stt status failed: ${res.status}`);
+  return res.json();
+}

@@ -87,3 +87,85 @@ export function cancelSpeak(): void {
     window.speechSynthesis.cancel();
   }
 }
+
+// ── Server-side STT (Whisper) recording — a second, opt-in engine ───────────
+// Records raw audio for the backend to transcribe, instead of the browser
+// transcribing it live. Fully additive: nothing above this line is touched.
+
+export interface RecordHandlers {
+  onStop?: (blob: Blob, mimeType: string) => void;
+  onError?: (msg: string) => void;
+}
+
+export function recordingSupported(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    typeof window.MediaRecorder !== "undefined"
+  );
+}
+
+let _recorder: MediaRecorder | null = null;
+
+function pickMimeType(): string {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  for (const t of candidates) {
+    if (window.MediaRecorder.isTypeSupported?.(t)) return t;
+  }
+  return ""; // let the browser pick its default
+}
+
+export async function startRecording(h: RecordHandlers): Promise<boolean> {
+  if (!recordingSupported()) {
+    h.onError?.("Microphone recording isn't supported in this browser.");
+    return false;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mimeType = pickMimeType();
+    const rec = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    const chunks: BlobPart[] = [];
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    rec.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop()); // release the mic
+      const blob = new Blob(chunks, { type: rec.mimeType || mimeType || "audio/webm" });
+      h.onStop?.(blob, rec.mimeType || mimeType || "audio/webm");
+      _recorder = null;
+    };
+    rec.onerror = () => h.onError?.("Recording failed.");
+    _recorder = rec;
+    rec.start();
+    return true;
+  } catch {
+    h.onError?.("Microphone permission was denied or unavailable.");
+    return false;
+  }
+}
+
+export function stopRecording(): void {
+  try {
+    _recorder?.stop();
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = new Uint8Array(await blob.arrayBuffer());
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < buf.length; i += chunkSize) {
+    binary += String.fromCharCode(...buf.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+/** "audio/webm;codecs=opus" -> "webm" — the container-format hint the backend
+ * uses as a temp-file suffix so mlx_whisper's decoder gets the right extension. */
+export function mimeTypeToFormat(mimeType: string): string {
+  if (mimeType.includes("mp4")) return "mp4";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
+}

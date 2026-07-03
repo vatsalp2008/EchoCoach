@@ -204,3 +204,37 @@ of it." Building + wiring as separate steps meant Phase 1/2 was never at risk,
 and the wiring diff itself stayed small and easy to review (a handful of call
 sites in `session.py` plus two new response fields) rather than being tangled
 into a big first-draft of the grounding logic.
+
+## ADR-016 — Local Whisper (mlx-whisper) as a second, opt-in STT engine
+**Context.** Voice input has always been 100% browser-side (`SpeechRecognition`
+in `frontend/lib/speech.ts`), which is Chrome-reliable but sends audio through
+Google's servers to recognize it, and doesn't work at all in some browsers. We
+evaluated OpenAI's open-source Whisper (free, local, MIT — distinct from
+OpenAI's paid hosted API) as a second engine, verified feasibility directly on
+this machine before committing: `pip download` confirmed `mlx`/`mlx-whisper`
+resolve to precompiled wheels for this exact Python 3.14.2/Apple Silicon combo
+(no compile step), and a live smoke test transcribed a sample word-perfectly in
+1.5s once the model was cached.
+**Decision.** Add `backend/app/stt.py` (mlx-whisper, model
+`mlx-community/whisper-large-v3-turbo-q4`) as an **additional, opt-in** engine
+— a "Browser / Whisper" toggle next to the existing Text/Voice toggle, default
+`"browser"`. Transport is base64-in-JSON (`TranscribeRequest.audio_b64`),
+mirroring the whiteboard's existing `image_b64` pattern exactly, rather than
+introducing multipart/form-data — this needed zero new dependencies
+(`python-multipart` was never installed) and reused the frontend's existing
+`post<T>()` helper verbatim. Considered `faster-whisper` (CPU-only, lighter
+deps) instead but chose the GPU-accelerated MLX path: interview answers use
+technical jargon and hedge words the grader LLM reads verbatim, so
+transcription accuracy directly affects grading quality, and large-v3-turbo is
+meaningfully better on that vocabulary than `base.en`, while MLX's Apple
+Silicon GPU acceleration keeps latency low despite the bigger model.
+**Tradeoff.** The actual install pulled in `torch`+`numba`+`llvmlite`+`scipy`
+transitively (heavier than hoped) and downgraded `numpy` 2.5.0→2.4.6 — verified
+this doesn't break Cognee or the rest of the app, but it's a real, sizeable
+dependency addition for one feature. Model download is ~500-600MB, one-time.
+**Reason.** Whisper's own architecture is turn-based (30s chunks, not live
+streaming), which fits this app's Q&A shape — a candidate finishes speaking,
+then it transcribes — so the accuracy upgrade was worth the dependency weight,
+especially with two independent kill switches (`ENABLE_WHISPER_STT=0` env var;
+the frontend simply defaults to and can always fall back to `"browser"`) so a
+broken install can never take down the app or block a demo.

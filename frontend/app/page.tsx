@@ -11,14 +11,21 @@ import {
   Profile,
   SessionMode,
   startSession,
+  sttStatus,
   submitAnswer,
+  transcribeAudio,
 } from "@/lib/api";
 import {
+  blobToBase64,
   cancelSpeak,
+  mimeTypeToFormat,
+  recordingSupported,
   speak,
   speechSupported,
   startListening,
+  startRecording,
   stopListening,
+  stopRecording,
 } from "@/lib/speech";
 import Avatar from "@/components/Avatar";
 import CodeEditor from "@/components/CodeEditor";
@@ -67,6 +74,13 @@ export default function Home() {
   const spokenFor = useRef<string>("");
   const proctor = useProctor();
 
+  // STT engine choice: browser (Web Speech, live transcript) vs whisper
+  // (record -> upload -> server transcribes). Browser stays the default —
+  // least risk to the already-working path (spec-style: additive, not a swap).
+  const [sttEngine, setSttEngine] = useState<"browser" | "whisper">("browser");
+  const [whisperAvail, setWhisperAvail] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
+
   // Whiteboard sketch (optional, non-coding questions).
   const [showBoard, setShowBoard] = useState(false);
   const [imageB64, setImageB64] = useState("");
@@ -87,7 +101,15 @@ export default function Home() {
         .then(setProfiles)
         .catch(() => setLoginError("Could not reach the server. Is the backend running?"));
     }
-    setVoiceAvail(speechSupported());
+    const browserOk = speechSupported();
+    setVoiceAvail(browserOk || recordingSupported());
+    sttStatus()
+      .then((s) => {
+        setWhisperAvail(s.available);
+        // Default to whichever works; prefer Browser when both do (least risk).
+        if (!browserOk && s.available) setSttEngine("whisper");
+      })
+      .catch(() => setWhisperAvail(false));
   }, []);
 
   async function handleLogin(e: React.FormEvent) {
@@ -134,6 +156,10 @@ export default function Home() {
   }, [phase, voiceMode, current]);
 
   function toggleMic() {
+    if (sttEngine === "whisper") {
+      toggleWhisperRecording();
+      return;
+    }
     if (listening) {
       stopListening();
       setListening(false);
@@ -148,6 +174,41 @@ export default function Home() {
       onEnd: () => setListening(false),
     });
     setListening(ok);
+  }
+
+  function toggleWhisperRecording() {
+    if (listening) {
+      stopRecording();
+      setListening(false);
+      return;
+    }
+    cancelSpeak();
+    setSpeaking(false);
+    setError("");
+    startRecording({
+      onStop: async (blob, mimeType) => {
+        setListening(false);
+        setTranscribing(true);
+        try {
+          const b64 = await blobToBase64(blob);
+          const res = await transcribeAudio(b64, mimeTypeToFormat(mimeType));
+          if (res.transcript) setAnswer(res.transcript);
+          else setError("Didn't catch that — try again, or switch to Browser mode or typing.");
+        } catch (err) {
+          setError(
+            "Server transcription failed (" +
+              String(err) +
+              "). Try Browser mode or type your answer."
+          );
+        } finally {
+          setTranscribing(false);
+        }
+      },
+      onError: (m) => {
+        setError(m);
+        setListening(false);
+      },
+    }).then((ok) => setListening(ok));
   }
 
   function beginIntro(e: React.FormEvent) {
@@ -190,6 +251,7 @@ export default function Home() {
     e.preventDefault();
     if (!current || (!answer.trim() && !imageB64)) return;
     stopListening();
+    stopRecording();
     setListening(false);
     cancelSpeak();
     setSpeaking(false);
@@ -232,9 +294,11 @@ export default function Home() {
   function reset() {
     cancelSpeak();
     stopListening();
+    stopRecording();
     proctor.stop();
     setSpeaking(false);
     setListening(false);
+    setTranscribing(false);
     setShowBoard(false);
     setImageB64("");
     spokenFor.current = "";
@@ -492,6 +556,7 @@ export default function Home() {
                           if (!v) {
                             cancelSpeak();
                             stopListening();
+                            stopRecording();
                             setSpeaking(false);
                             setListening(false);
                           } else {
@@ -513,6 +578,37 @@ export default function Home() {
                 </div>
               )}
             </div>
+
+            {voiceMode && (speechSupported() || whisperAvail) && (
+              <div className="flex justify-end">
+                <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 bg-white text-xs">
+                  {(
+                    [
+                      ["browser", "Browser", speechSupported()],
+                      ["whisper", "Whisper", whisperAvail && recordingSupported()],
+                    ] as [typeof sttEngine, string, boolean][]
+                  ).map(([eng, label, avail]) => (
+                    <button
+                      key={eng}
+                      type="button"
+                      disabled={!avail}
+                      onClick={() => setSttEngine(eng)}
+                      title={avail ? undefined : `${label} isn't available in this browser`}
+                      className={
+                        "rounded-md px-2.5 py-1 " +
+                        (sttEngine === eng
+                          ? "bg-neutral-900 text-white"
+                          : avail
+                            ? "text-neutral-600 hover:text-neutral-900"
+                            : "text-neutral-300 cursor-not-allowed")
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {voiceMode && (
               <Avatar speaking={speaking} listening={listening} bump={bump} />
@@ -564,14 +660,15 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={toggleMic}
+                  disabled={transcribing}
                   className={
-                    "rounded-lg px-4 py-2 text-sm font-medium border " +
+                    "rounded-lg px-4 py-2 text-sm font-medium border disabled:opacity-50 " +
                     (listening
                       ? "border-red-300 bg-red-50 text-red-700"
                       : "border-neutral-300 text-neutral-700 hover:bg-neutral-100")
                   }
                 >
-                  {listening ? "◼ Stop" : "🎤 Speak"}
+                  {transcribing ? "Transcribing…" : listening ? "◼ Stop" : "🎤 Speak"}
                 </button>
               )}
               {voiceMode && current && (

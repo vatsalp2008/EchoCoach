@@ -59,6 +59,15 @@ class GradingSignal(GradingAssessment):
 
 
 # ── API models ──────────────────────────────────────────────────────────────
+class TranscribeRequest(BaseModel):
+    audio_b64: str
+    format: str = "webm"  # container hint: "webm" (Chrome default), "mp4" (Safari)
+
+
+class TranscribeResponse(BaseModel):
+    transcript: str
+
+
 class LoginRequest(BaseModel):
     user_id: str
     pin: str

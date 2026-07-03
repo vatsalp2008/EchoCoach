@@ -87,6 +87,13 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
     so scripts/one-off runs print `Unclosed client session` / `Unclosed connector`
     (aiohttp) warnings at exit. Harmless — no leak in the long-running server.
     Fix later with an explicit `client.aclose()` on shutdown.
+12. **`pip install mlx mlx-whisper` pulls in torch + numba + llvmlite + scipy
+    transitively** (heavier than the package names suggest) and **downgrades
+    `numpy` 2.5.0 → 2.4.6** (numba's pin). Verified this doesn't break Cognee or
+    anything else in the app — but if you add another package that wants
+    numpy ≥2.5 later, re-check for a conflict. First run of `mlx_whisper.transcribe()`
+    also downloads the model (~500-600MB) from the HF Hub — do this once, well
+    ahead of any demo, not during it.
 
 ## Hackathon compliance (don't lose points / get DQ'd)
 - **MUST disclose AI-assistant use (Claude Code) in the README** — non-disclosure is
@@ -197,11 +204,35 @@ cd frontend && npm run dev
       wiring bug) and degraded to `Status.ERROR` exactly as designed: no crash, no
       block, `grounding_note` stays hidden, the interview and debrief completed
       normally throughout. **The company field is no longer inert.**
+- [x] **Local Whisper STT (second, opt-in voice engine).** `backend/app/stt.py`
+      wraps `mlx-whisper` (model `mlx-community/whisper-large-v3-turbo-q4`, Apple
+      Silicon GPU-accelerated) behind the same singleton/guarded-import pattern as
+      `llm_client.py`. New endpoints `GET /api/stt/status` and `POST /api/transcribe`
+      (base64-in-JSON, mirroring the whiteboard's `image_b64` pattern — no new
+      dependency like `python-multipart` needed). Frontend gained a "Browser /
+      Whisper" toggle next to the existing Text/Voice toggle (default `browser` —
+      least risk); `speech.ts` extended (not replaced) with `recordingSupported`/
+      `startRecording`/`stopRecording`/`blobToBase64`. **Verified live on this
+      machine:** real transcription of a spoken sample was word-perfect in ~1.1-1.5s
+      once the model is cached (`curl /api/transcribe` end to end); malformed audio
+      returns a clean 503 (backend stays healthy, never crashes); the
+      `ENABLE_WHISPER_STT=0` kill switch disables it without ever importing
+      `mlx_whisper`; the full typed-answer core loop was regression-tested with zero
+      change in behavior. See ADR-016. **Not yet tested:** the actual browser mic
+      flow (record → upload → transcribe → fill textarea) — needs a human with a
+      real microphone in Chrome; agents can't operate a physical mic.
 
 ## 🚧 Remaining
+- [ ] **Manual mic test in Chrome** for the new Whisper engine: toggle to
+      "Whisper", speak an answer, confirm it transcribes into the textarea; also
+      test denying the mic permission (should show an error, not hang) and killing
+      the backend mid-recording (should fall back to typing/Browser engine cleanly).
 - [ ] **UI polish pass** (deferred by decision — do after core features).
 - [ ] **Rehearsals** — 2 full run-throughs in Chrome before submission.
 - [ ] (nicety) `scripts/phase1_e2e.py` 2-session routing assertion when convenient.
+- [ ] (nicety) Before any real demo: run `/api/transcribe` once on the demo
+      machine/network to populate the HF cache, then set `HF_HUB_OFFLINE=1` so
+      the demo run can't stall checking venue wifi for model updates.
 - [ ] (nicety) Set up real Reddit credentials (`docs/reddit_api_setup.md`) so grounding
       isn't GitHub-only.
 
