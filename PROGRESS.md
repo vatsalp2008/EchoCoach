@@ -79,6 +79,14 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
    raw substring `in` checks.** Editing `grading.py` triggers uvicorn `--reload`,
    which wipes in-memory `_ACTIVE` sessions — anyone mid-interview when this kind
    of fix lands needs to restart their session (turn state isn't persisted).
+10. **`get_status()` needs UUID objects, but `remember()` returns the dataset id
+   as a `str`** — passing the str straight through raises
+   `StatementError: 'str' object has no attribute 'hex'` (SQLAlchemy's UUID bind).
+   `grounding.py` coerces via `_as_uuid()` before polling. (Phase 3.)
+11. **(cosmetic, known)** The `google-genai` async client isn't explicitly closed,
+    so scripts/one-off runs print `Unclosed client session` / `Unclosed connector`
+    (aiohttp) warnings at exit. Harmless — no leak in the long-running server.
+    Fix later with an explicit `client.aclose()` on shutdown.
 
 ## Hackathon compliance (don't lose points / get DQ'd)
 - **MUST disclose AI-assistant use (Claude Code) in the README** — non-disclosure is
