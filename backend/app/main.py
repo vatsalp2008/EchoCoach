@@ -10,10 +10,12 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import db, debrief, graph_api, memory
+from . import auth, db, debrief, graph_api, memory
 from .schemas import (
     AnswerRequest,
     AnswerResponse,
+    LoginRequest,
+    LoginResponse,
     StartSessionRequest,
     StartSessionResponse,
 )
@@ -41,6 +43,20 @@ app.include_router(graph_api.router)
 @app.get("/api/health")
 async def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/profiles")
+async def profiles() -> list[dict]:
+    """Public profile list (no pins) for the login screen's picker."""
+    return auth.list_profiles()
+
+
+@app.post("/api/login", response_model=LoginResponse)
+async def login(req: LoginRequest) -> LoginResponse:
+    display_name = auth.verify(req.user_id, req.pin)
+    if not display_name:
+        raise HTTPException(status_code=401, detail="Invalid ID or PIN")
+    return LoginResponse(user_id=req.user_id, display_name=display_name)
 
 
 @app.post("/api/session", response_model=StartSessionResponse)

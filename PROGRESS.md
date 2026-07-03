@@ -2,8 +2,8 @@
 
 Living doc of **what's done** and **what's left**. Update it as you land work.
 Last verified: core loop + Phase 2 + voice + code editor + whiteboard + proctoring
-+ per-user profiles all working end-to-end; README + demo seed done. Only external
-grounding (Reddit/GitHub) and UI polish remain.
++ ID+PIN login for 2 users + single `npm run dev` all working end-to-end; README +
+demo seed done. Only external grounding (Reddit/GitHub) and UI polish remain.
 
 ---
 
@@ -84,15 +84,32 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
 # 1. Python backend
 cd backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+cd ..
 
-# 2. Secrets — copy the template and fill in the Gemini key (+ Reddit/GitHub later)
-cd .. && cp .env.example .env    # then edit .env
+# 2. Frontend deps + root dev-orchestration deps (concurrently)
+cd frontend && npm install && cd ..
+npm install    # root package.json — installs `concurrently`
 
-# 3. Prove Cognee works end to end
+# 3. Secrets — copy the template and fill in the Gemini key (+ login PINs, Reddit/GitHub later)
+cp .env.example .env    # then edit .env
+
+# 4. Prove Cognee works end to end (one-time sanity check, not needed every run)
 backend/.venv/bin/python backend/scripts/cognee_smoke_test.py
 # expect: "[ok] Full remember -> recall -> improve -> forget loop passed."
+
+# 5. Run everything with ONE command from the repo root
+npm run dev
+# -> backend on :8000 (with --reload), frontend on :3000, both logs interleaved.
+# Ctrl+C stops both. (Prefer running them in separate terminals? See below.)
 ```
-`.env` is gitignored — never commit the key. `.env.example` documents every var.
+`.env` is gitignored — never commit the key/PINs. `.env.example` documents every var.
+
+Prefer separate terminals (to watch each log cleanly) instead of the combined
+`npm run dev`? Run these in two tabs:
+```bash
+cd backend && .venv/bin/uvicorn app.main:app --reload --port 8000
+cd frontend && npm run dev
+```
 
 ---
 
@@ -107,8 +124,30 @@ backend/.venv/bin/python backend/scripts/cognee_smoke_test.py
 - [x] **Behavioral domain + Full mode (Phase 2).** behavioral bank + rubric (§6.2 verbatim,
       delivery affects signal); technical/behavioral/**full** session modes.
 - [x] **Weakness-graph viz.** `/api/graph` + `react-force-graph-2d` at `/graph`, colored by signal.
-- [x] **Per-user profiles.** username scopes the memory graph (datasets `topic:<user>:<slug>`,
+- [x] **Per-user profiles.** user_id scopes the memory graph (datasets `topic:<user>:<slug>`,
       signals filtered by user, `/api/graph?user=`).
+- [x] **Login: ID + PIN for 2 known users.** `backend/app/auth.py` — `vatsal` / `sakshi`,
+      PINs from env (`PIN_VATSAL`, `PIN_SAKSHI`, demo defaults `1111`/`2222`). Endpoints:
+      `GET /api/profiles` (public list for the picker), `POST /api/login` (401 on bad
+      id/pin). Frontend gained a "login" phase before "setup": pick a profile card, enter
+      PIN, session persists in localStorage (`echocoach_user` id + `echocoach_display_name`)
+      until "not you?" logs out. This **replaces** the old free-text name field — no more
+      typed usernames, only the two registered profiles. Not real auth (no hashing/sessions/
+      tokens) — deliberately minimal for a 2-person local demo; see `docs/DECISIONS.md` ADR-012.
+- [x] **No follow-ups on pure DSA/coding questions.** A LeetCode-style problem has one
+      approach to grade, not a "dig deeper" probe — real interviewers don't do that for a
+      coding question. `session.py`'s `submit_answer` now checks `is_coding(topic)`
+      (from `question_bank.py`) and skips the whole follow-up branch for coding topics —
+      graded and moved on regardless of `follow_up_needed`. Behavioral/non-coding technical
+      topics are unaffected (follow-up cap=2 logic unchanged there). See ADR-013.
+- [x] **Single `npm run dev` from the repo root.** Root `package.json` (+ `concurrently`)
+      runs the FastAPI backend (`--reload`, :8000) and the Next.js frontend (:3000)
+      together, prefixed `[backend]`/`[frontend]` in one terminal; Ctrl+C stops both.
+      Gotcha hit + fixed: adding a root `package-lock.json` made Next/Turbopack mis-detect
+      its workspace root (picked the repo root instead of `frontend/`), which broke the
+      React Server Components module manifest (`GET / 500`, "Could not find the module...
+      in the React Client Manifest"). Fixed by pinning `turbopack.root` explicitly in
+      `frontend/next.config.ts`. See ADR-014.
 - [x] **Voice + avatar (Phase 4).** `lib/speech.ts` (Web Speech STT/TTS) + pulsing `Avatar`;
       text stays the fallback via a toggle. Chrome-only for voice.
 - [x] **Code editor.** Monaco for DSA topics (backend `coding` flag).
@@ -134,22 +173,26 @@ backend/.venv/bin/python backend/scripts/cognee_smoke_test.py
 README.md                    story, architecture, How-we-used-Cognee, AI disclosure
 echocoach_build_spec.md      full spec
 PROGRESS.md                  this file
+package.json                 root — `npm run dev` runs backend+frontend via concurrently
 docs/DECISIONS.md            ADR log (with tradeoffs)
 docs/reddit_api_setup.md     Phase 3 creds guide
-.env.example / .env          env template / real secrets (gitignored)
+.env.example / .env          env template / real secrets (gitignored) — incl. PIN_VATSAL/PIN_SAKSHI
 backend/
   requirements.txt
   app/
     config.py                env load + cognee local/Gemini config
     memory.py                the ONLY cognee wrapper (remember/recall/improve/forget + breaker)
     llm_client.py            Gemini adapter (JSON + multimodal image; quota detection)
+    auth.py                  2-user ID+PIN registry (vatsal/sakshi) + verify()
     grading.py               technical + behavioral rubrics (verbatim) + heuristic fallback
-    session.py               loop, follow-up cap, routing, mastery, per-user, full mode
+    session.py               loop, follow-up cap (skipped for coding topics), routing,
+                              mastery, per-user, full mode
     debrief.py               concise end-of-session report (+ template fallback)
-    question_bank.py         technical + behavioral banks; coding topics; diagnostics
+    question_bank.py         technical + behavioral banks; CODING_TOPICS; diagnostics
     db.py                    SQLite: sessions, follow_up_counters, question_bank, signals
     graph_api.py             /api/graph nodes+edges (per-user)
-    schemas.py               pydantic (grading signal, API models)
+    schemas.py               pydantic (grading signal, API models, login)
+    main.py                  FastAPI routes incl. /api/login, /api/profiles
   scripts/
     cognee_smoke_test.py     Phase 0 gate + API introspection
     http_smoke.py            drive a full session over HTTP
@@ -157,7 +200,8 @@ backend/
     seed_sessions.py         seed a shaped demo graph
     phase1_e2e.py            (nicety) 2-session routing assertion
 frontend/
-  app/            page.tsx (interview: setup→intro→interview→debrief), graph/page.tsx, layout (nav)
+  next.config.ts             pins turbopack.root (see gotcha above)
+  app/            page.tsx (login→setup→intro→interview→debrief), graph/page.tsx, layout (nav)
   components/     Avatar, CodeEditor, Whiteboard, WeaknessGraph
-  lib/            api.ts, speech.ts, useProctor.ts
+  lib/            api.ts (incl. login/getProfiles), speech.ts, useProctor.ts
 ```

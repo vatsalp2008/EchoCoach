@@ -59,6 +59,16 @@ class GradingSignal(GradingAssessment):
 
 
 # ── API models ──────────────────────────────────────────────────────────────
+class LoginRequest(BaseModel):
+    user_id: str
+    pin: str
+
+
+class LoginResponse(BaseModel):
+    user_id: str
+    display_name: str
+
+
 class StartSessionRequest(BaseModel):
     target_role: str
     company: Optional[str] = None

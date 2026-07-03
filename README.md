@@ -59,23 +59,26 @@ Why a **graph** and not a flat list: interview topics have genuine prerequisite/
 ## Setup
 
 ```bash
-# 1. Backend
-cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# 1. Backend deps
+cd backend && python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && cd ..
 
-# 2. Env — copy the template and add your Gemini key (see .env.example for all vars)
-cd .. && cp .env.example .env      # set GEMINI_API_KEY and LLM_API_KEY
+# 2. Frontend + root deps (root package.json runs both servers together)
+cd frontend && npm install && cd .. && npm install
 
-# 3. Prove the memory layer works end to end
+# 3. Env — copy the template and add your Gemini key + login PINs (see .env.example)
+cp .env.example .env      # set GEMINI_API_KEY, LLM_API_KEY, PIN_VATSAL, PIN_SAKSHI
+
+# 4. (Optional) prove the memory layer works end to end
 backend/.venv/bin/python backend/scripts/cognee_smoke_test.py
 
-# 4. (Optional) seed a demo user's graph so the demo opens with shape
+# 5. (Optional) seed a demo user's graph so the demo opens with shape
 backend/.venv/bin/python backend/scripts/seed_sessions.py demo
 
-# 5. Run backend + frontend
-backend/.venv/bin/uvicorn app.main:app --port 8000     # from backend/
-cd frontend && npm install && npm run dev              # http://localhost:3000
+# 6. Run everything — one command, from the repo root
+npm run dev              # backend on :8000, frontend on :3000
 ```
+
+Log in with one of the two configured profiles (ID + PIN — see `.env`) at `http://localhost:3000`.
 
 Voice mode is Chrome-only (Web Speech API); text mode works everywhere.
 

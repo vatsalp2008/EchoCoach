@@ -5,6 +5,35 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 export type Domain = "technical" | "behavioral";
 export type SessionMode = "technical" | "behavioral" | "full";
 
+export interface Profile {
+  user_id: string;
+  display_name: string;
+}
+
+export interface LoginResponse {
+  user_id: string;
+  display_name: string;
+}
+
+export async function getProfiles(): Promise<Profile[]> {
+  const res = await fetch(`${API_BASE}/api/profiles`);
+  if (!res.ok) throw new Error(`profiles failed: ${res.status}`);
+  return res.json() as Promise<Profile[]>;
+}
+
+export async function login(user_id: string, pin: string): Promise<LoginResponse> {
+  const res = await fetch(`${API_BASE}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_id, pin }),
+  });
+  if (!res.ok) {
+    if (res.status === 401) throw new Error("Wrong ID or PIN.");
+    throw new Error(`login failed: ${res.status}`);
+  }
+  return res.json() as Promise<LoginResponse>;
+}
+
 export interface StartSessionResponse {
   session_id: string;
   question_id: string;

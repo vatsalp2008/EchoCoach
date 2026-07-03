@@ -133,3 +133,53 @@ in Cognee.
 **Reason.** Cognee is the memory layer, not a general app DB; forcing counters and
 bank rows into the graph would muddy the "what's actually memory" story and
 over-engineer bookkeeping the spec explicitly says to keep simple.
+
+## ADR-012 — ID + PIN login for exactly 2 known users, not real auth
+**Context.** Only two people (vatsal, sakshi) use this app. Free-text usernames
+(the earlier "lightweight profile" approach) risked typos creating phantom
+profiles and didn't feel like "logging in as yourself."
+**Decision.** A small hardcoded registry (`backend/app/auth.py`) maps 2 user ids
+to a display name and a PIN (read from env: `PIN_VATSAL`, `PIN_SAKSHI`, with demo
+defaults). `GET /api/profiles` lists the public picker info; `POST /api/login`
+checks the PIN and returns the display name; the frontend gates on a `login`
+phase before `setup` and remembers the logged-in id in localStorage.
+**Tradeoff.** Not real auth — no password hashing, no sessions/tokens, no
+protection beyond "don't share your PIN." Adding a third user means editing code.
+**Reason.** For 2 known people sharing one local app, this is proportionate: it
+prevents accidental cross-contamination of memory graphs and gives a real
+"who's interviewing" moment, without building auth infrastructure this project
+doesn't need. If this ever serves untrusted users, replace with real auth first.
+
+## ADR-013 — No follow-ups on pure DSA/coding questions
+**Context.** The follow-up system (spec 5.3, cap=2) was built for open-ended
+technical/behavioral questions where "dig deeper into X" is a natural interviewer
+move. Pure DSA/LeetCode-style questions are different: there's one algorithmic
+approach to evaluate, and a live interviewer doesn't say "dig deeper" on a coding
+problem — they just move to the next one (or ask you to code a variant, which is
+really a new question, not a follow-up).
+**Decision.** `question_bank.py` tags topics as `CODING_TOPICS`; `session.py`'s
+`submit_answer` checks `is_coding(topic)` and skips the entire follow-up branch
+for those topics — the answer is graded and the session advances regardless of
+`follow_up_needed`.
+**Tradeoff.** A struggling DSA answer no longer gets a clarifying nudge before
+being marked struggled — it's graded as answered, cap or no cap.
+**Reason.** Matches how real interviews actually run for coding questions, and
+was an explicit product decision (not something to reverse without asking).
+
+## ADR-014 — Single `npm run dev` for both servers, backend stays Python
+**Context.** The project has two runtimes (Python/FastAPI backend, Node/Next.js
+frontend), which normally means two terminals. Wanted for ease.
+**Decision.** A root `package.json` with `concurrently` runs both:
+`npm run dev` at the repo root starts `uvicorn --reload` (backend) and
+`next dev` (frontend) together, log-prefixed, single Ctrl+C to stop both. The
+backend itself is NOT rewritten in Node — `concurrently` just shells out to the
+existing `backend/.venv/bin/uvicorn`.
+**Tradeoff/gotcha hit.** Adding a root `package-lock.json` made Next.js's
+Turbopack mis-detect its workspace root (it picked the repo root over
+`frontend/` because it saw two lockfiles), which broke the React Server
+Components module manifest entirely (every page 500'd with "Could not find the
+module ... in the React Client Manifest"). Fixed by explicitly pinning
+`turbopack.root` to the frontend directory in `frontend/next.config.ts`.
+**Reason.** One-command startup is worth the root `package.json`, but the
+lockfile/workspace-root interaction is a real Next.js/Turbopack footgun worth
+documenting — anyone adding more root-level Node tooling should re-check this.

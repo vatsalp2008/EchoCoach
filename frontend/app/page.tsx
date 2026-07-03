@@ -5,6 +5,9 @@ import ReactMarkdown from "react-markdown";
 import {
   AnswerResponse,
   getDebrief,
+  getProfiles,
+  login,
+  Profile,
   SessionMode,
   startSession,
   submitAnswer,
@@ -21,7 +24,7 @@ import CodeEditor from "@/components/CodeEditor";
 import Whiteboard from "@/components/Whiteboard";
 import { useProctor } from "@/lib/useProctor";
 
-type Phase = "setup" | "intro" | "interview" | "loading" | "debrief";
+type Phase = "login" | "setup" | "intro" | "interview" | "loading" | "debrief";
 
 interface CurrentQ {
   questionId: string;
@@ -32,8 +35,17 @@ interface CurrentQ {
 }
 
 export default function Home() {
-  const [phase, setPhase] = useState<Phase>("setup");
-  const [username, setUsername] = useState("");
+  const [phase, setPhase] = useState<Phase>("login");
+
+  // Login (ID + PIN, 2 known users — see backend/app/auth.py).
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [userId, setUserId] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [selectedProfile, setSelectedProfile] = useState<string>("");
+  const [pin, setPin] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
+
   const [role, setRole] = useState("");
   const [company, setCompany] = useState("");
   const [domain, setDomain] = useState<SessionMode>("technical");
@@ -57,12 +69,52 @@ export default function Home() {
   const [showBoard, setShowBoard] = useState(false);
   const [imageB64, setImageB64] = useState("");
 
-  // Load the saved profile name + feature-detect speech on the client.
+  // Restore a saved login (client-only) + feature-detect speech.
   useEffect(() => {
-    const saved = localStorage.getItem("echocoach_user");
-    if (saved) setUsername(saved);
+    const savedId = localStorage.getItem("echocoach_user");
+    const savedName = localStorage.getItem("echocoach_display_name");
+    if (savedId && savedName) {
+      setUserId(savedId);
+      setDisplayName(savedName);
+      setPhase("setup");
+    } else {
+      getProfiles()
+        .then(setProfiles)
+        .catch(() => setLoginError("Could not reach the server. Is the backend running?"));
+    }
     setVoiceAvail(speechSupported());
   }, []);
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedProfile || !pin.trim()) return;
+    setLoginError("");
+    setLoggingIn(true);
+    try {
+      const res = await login(selectedProfile, pin.trim());
+      localStorage.setItem("echocoach_user", res.user_id);
+      localStorage.setItem("echocoach_display_name", res.display_name);
+      setUserId(res.user_id);
+      setDisplayName(res.display_name);
+      setPin("");
+      setPhase("setup");
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoggingIn(false);
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem("echocoach_user");
+    localStorage.removeItem("echocoach_display_name");
+    setUserId("");
+    setDisplayName("");
+    setSelectedProfile("");
+    setPin("");
+    getProfiles().then(setProfiles).catch(() => {});
+    setPhase("login");
+  }
 
   // In voice mode, the interviewer speaks each new question exactly once.
   useEffect(() => {
@@ -103,14 +155,12 @@ export default function Home() {
   async function startInterview() {
     setError("");
     setPhase("loading");
-    const uid = username.trim() || "guest";
-    localStorage.setItem("echocoach_user", uid);
     try {
       const res = await startSession({
         target_role: role.trim(),
         company: company.trim() || undefined,
         domain_focus: domain,
-        user_id: uid,
+        user_id: userId,
       });
       setSessionId(res.session_id);
       setCurrent({
@@ -208,18 +258,74 @@ export default function Home() {
           </div>
         )}
 
+        {phase === "login" && (
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">
+                Who&apos;s interviewing?
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {profiles.map((p) => (
+                  <button
+                    key={p.user_id}
+                    type="button"
+                    onClick={() => setSelectedProfile(p.user_id)}
+                    className={
+                      "rounded-lg border px-4 py-3 text-sm font-medium " +
+                      (selectedProfile === p.user_id
+                        ? "border-neutral-900 bg-neutral-900 text-white"
+                        : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100")
+                    }
+                  >
+                    {p.display_name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {selectedProfile && (
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  PIN
+                </label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  value={pin}
+                  onChange={(e) => setPin(e.target.value)}
+                  placeholder="••••"
+                  className={inputCls}
+                  autoFocus
+                />
+              </div>
+            )}
+            {loginError && (
+              <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+                {loginError}
+              </div>
+            )}
+            <button
+              type="submit"
+              className={primaryBtn}
+              disabled={!selectedProfile || !pin.trim() || loggingIn}
+            >
+              {loggingIn ? "Checking…" : "Log in"}
+            </button>
+          </form>
+        )}
+
         {phase === "setup" && (
           <form onSubmit={beginIntro} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">
-                Your name <span className="text-neutral-400">(so EchoCoach remembers you)</span>
-              </label>
-              <input
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="e.g. vatsal"
-                className={inputCls}
-              />
+            <div className="flex items-center justify-between text-sm text-neutral-600">
+              <span>
+                Signed in as <span className="font-medium text-neutral-900">{displayName}</span>
+              </span>
+              <button
+                type="button"
+                onClick={logout}
+                className="text-neutral-500 hover:text-neutral-900 underline"
+              >
+                not you?
+              </button>
             </div>
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-1">

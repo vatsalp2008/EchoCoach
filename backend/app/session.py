@@ -131,11 +131,16 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
     )
 
     # 6. Follow-up logic (spec 5.3), only for the topic just answered.
+    # Pure DSA/coding questions (is_coding) skip follow-ups entirely: a LeetCode-
+    # style problem has one correct approach to grade, not a "dig deeper" probe —
+    # asking a real interviewer follow-up doesn't fit that question shape. They
+    # are graded and moved past like any other resolved answer.
     topic = current["topic"]
     count = db.get_follow_up_count(req.session_id, topic)
     resolved = sig.signal in ("mastered", "partial") and not sig.follow_up_needed
+    skip_follow_up = is_coding(topic)
 
-    if sig.follow_up_needed and not resolved and count < FOLLOW_UP_CAP:
+    if not skip_follow_up and sig.follow_up_needed and not resolved and count < FOLLOW_UP_CAP:
         db.increment_follow_up(req.session_id, topic)
         fu_text = await _generate_follow_up(
             topic, sig.follow_up_focus, current["question"], req.transcript
@@ -150,7 +155,7 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
             is_follow_up=True, coding=is_coding(topic),
         )
 
-    if sig.follow_up_needed and not resolved and count >= FOLLOW_UP_CAP:
+    if not skip_follow_up and sig.follow_up_needed and not resolved and count >= FOLLOW_UP_CAP:
         # Two failed clarifications is itself a real signal (spec 5.3).
         await _force_struggled(req.session_id, user_id, topic, current["domain"])
 
