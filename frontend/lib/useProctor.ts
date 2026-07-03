@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 // Lightweight, client-only proctoring: like a real remote interview, we notice
 // when the candidate leaves the interview window (tab switch, minimize, or
-// exiting fullscreen) and count it as a focus-loss event. Purely informational —
+// exiting fullscreen) and count it as a focus-loss event. Purely informational -
 // it warns the candidate and tallies violations; it can't truly prevent switching
 // (no browser can), which we're honest about in the UI.
 

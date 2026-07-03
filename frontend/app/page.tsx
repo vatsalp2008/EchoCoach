@@ -46,7 +46,7 @@ interface CurrentQ {
 export default function Home() {
   const [phase, setPhase] = useState<Phase>("login");
 
-  // Login (ID + PIN, 2 known users — see backend/app/auth.py).
+  // Login (ID + PIN, 2 known users - see backend/app/auth.py).
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [userId, setUserId] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -75,7 +75,7 @@ export default function Home() {
   const proctor = useProctor();
 
   // STT engine choice: browser (Web Speech, live transcript) vs whisper
-  // (record -> upload -> server transcribes). Browser stays the default —
+  // (record -> upload -> server transcribes). Browser stays the default -
   // least risk to the already-working path (spec-style: additive, not a swap).
   const [sttEngine, setSttEngine] = useState<"browser" | "whisper">("browser");
   const [whisperAvail, setWhisperAvail] = useState(false);
@@ -193,7 +193,7 @@ export default function Home() {
           const b64 = await blobToBase64(blob);
           const res = await transcribeAudio(b64, mimeTypeToFormat(mimeType));
           if (res.transcript) setAnswer(res.transcript);
-          else setError("Didn't catch that — try again, or switch to Browser mode or typing.");
+          else setError("Didn't catch that - try again, or switch to Browser mode or typing.");
         } catch (err) {
           setError(
             "Server transcription failed (" +
@@ -472,20 +472,20 @@ export default function Home() {
               </div>
               <div className="space-y-2 text-sm leading-relaxed text-neutral-700">
                 <p>
-                  Hi — thanks for making the time today. I&apos;ll be your interviewer for
+                  Hi - thanks for making the time today. I&apos;ll be your interviewer for
                   this <span className="font-medium">{role}</span> session.
                 </p>
                 <p>
                   Here&apos;s how this works: I&apos;ll ask you a few questions and dig in
                   with follow-ups, just like a real interview. Think out loud and answer
-                  as you naturally would — I won&apos;t grade you as we go. At the end
+                  as you naturally would - I won&apos;t grade you as we go. At the end
                   you&apos;ll get a short debrief on how it went.
                 </p>
                 <p>Ready when you are.</p>
               </div>
             </div>
             <button onClick={startInterview} className={primaryBtn}>
-              I&apos;m ready — begin
+              I&apos;m ready - begin
             </button>
           </div>
         )}

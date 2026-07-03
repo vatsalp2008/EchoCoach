@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 // A minimal "AI interviewer" avatar: a pulsing orb. The Web Speech synthesis API
 // exposes no audio stream to analyze, so we drive motion from speaking state plus
-// per-word boundary bumps — volume-driven-looking movement that reads as intentional
+// per-word boundary bumps - volume-driven-looking movement that reads as intentional
 // (spec 8.4). `bump` should be incremented by the caller on each speech boundary.
 export default function Avatar({
   speaking,

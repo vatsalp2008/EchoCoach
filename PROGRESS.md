@@ -218,15 +218,18 @@ cd frontend && npm run dev
       returns a clean 503 (backend stays healthy, never crashes); the
       `ENABLE_WHISPER_STT=0` kill switch disables it without ever importing
       `mlx_whisper`; the full typed-answer core loop was regression-tested with zero
-      change in behavior. See ADR-016. **Not yet tested:** the actual browser mic
-      flow (record → upload → transcribe → fill textarea) — needs a human with a
-      real microphone in Chrome; agents can't operate a physical mic.
+      change in behavior. **Manually confirmed working in Chrome** (real mic,
+      record → upload → transcribe → fills the textarea). See ADR-016.
+      Note: the "Browser" engine already gives live/interim text as you speak
+      (Web Speech API's `interimResults`) — Whisper only returns text after you
+      hit Stop, since the model itself is turn-based (30s batch), not streaming.
+      True live-captioned Whisper would need a materially different design
+      (continuous chunk upload + incremental re-transcription + text-stitching,
+      likely over a WebSocket instead of the current one-shot POST) — not
+      pursued; use the Browser engine when live captions matter more than
+      Whisper's better technical-vocabulary accuracy.
 
 ## 🚧 Remaining
-- [ ] **Manual mic test in Chrome** for the new Whisper engine: toggle to
-      "Whisper", speak an answer, confirm it transcribes into the textarea; also
-      test denying the mic permission (should show an error, not hang) and killing
-      the backend mid-recording (should fall back to typing/Browser engine cleanly).
 - [ ] **UI polish pass** (deferred by decision — do after core features).
 - [ ] **Rehearsals** — 2 full run-throughs in Chrome before submission.
 - [ ] (nicety) `scripts/phase1_e2e.py` 2-session routing assertion when convenient.

@@ -73,7 +73,7 @@ export default function Whiteboard({
   return (
     <div className="rounded-lg border border-neutral-300 overflow-hidden">
       <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-100 px-3 py-1.5">
-        <span className="text-xs text-neutral-500">Whiteboard — sketch your design; the interviewer sees it</span>
+        <span className="text-xs text-neutral-500">Whiteboard - sketch your design; the interviewer sees it</span>
         <button
           type="button"
           onClick={clear}

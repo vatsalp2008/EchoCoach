@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic";
 import { useState } from "react";
 
-// Monaco is client-only and heavy — load it lazily.
+// Monaco is client-only and heavy - load it lazily.
 const Monaco = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (

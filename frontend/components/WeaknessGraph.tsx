@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { getGraph, GraphData, GraphNode } from "@/lib/api";
 
-// react-force-graph-2d touches window/canvas — load client-only.
+// react-force-graph-2d touches window/canvas - load client-only.
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
   ssr: false,
 });
@@ -16,7 +16,7 @@ const SIGNAL_COLOR: Record<string, string> = {
   avoided: "#7f1d1d", // dark red
   unassessed: "#cbd5e1", // gray
 };
-const ARCHIVED_COLOR = "#0ea5e9"; // sky — mastered & archived via forget()
+const ARCHIVED_COLOR = "#0ea5e9"; // sky - mastered & archived via forget()
 
 function colorFor(n: GraphNode): string {
   if (n.archived) return ARCHIVED_COLOR;
@@ -95,7 +95,7 @@ export default function WeaknessGraph() {
             nodeRelSize={5}
             nodeVal={(n: any) => 4 + (n.interactions ?? 0)}
             nodeLabel={(n: any) =>
-              `${n.label} — ${n.archived ? "mastered (archived)" : n.signal}` +
+              `${n.label} - ${n.archived ? "mastered (archived)" : n.signal}` +
               (n.interactions ? ` · ${n.interactions} answer(s)` : "")
             }
             nodeCanvasObject={(n: any, ctx, scale) => {
@@ -114,7 +114,7 @@ export default function WeaknessGraph() {
           />
         ) : (
           <div className="grid h-full place-items-center text-sm text-neutral-400">
-            {data ? "No topics yet — run a session first." : "Loading graph…"}
+            {data ? "No topics yet - run a session first." : "Loading graph…"}
           </div>
         )}
       </div>

@@ -12,7 +12,7 @@ export interface ListenHandlers {
 
 export interface SpeakHandlers {
   onStart?: () => void;
-  onBoundary?: () => void; // fires per word — used to pulse the avatar
+  onBoundary?: () => void; // fires per word - used to pulse the avatar
   onEnd?: () => void;
 }
 
@@ -88,7 +88,7 @@ export function cancelSpeak(): void {
   }
 }
 
-// ── Server-side STT (Whisper) recording — a second, opt-in engine ───────────
+// ── Server-side STT (Whisper) recording - a second, opt-in engine ───────────
 // Records raw audio for the backend to transcribe, instead of the browser
 // transcribing it live. Fully additive: nothing above this line is touched.
 
@@ -162,7 +162,7 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-/** "audio/webm;codecs=opus" -> "webm" — the container-format hint the backend
+/** "audio/webm;codecs=opus" -> "webm" - the container-format hint the backend
  * uses as a temp-file suffix so mlx_whisper's decoder gets the right extension. */
 export function mimeTypeToFormat(mimeType: string): string {
   if (mimeType.includes("mp4")) return "mp4";
