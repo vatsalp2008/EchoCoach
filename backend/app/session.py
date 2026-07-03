@@ -16,7 +16,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from . import db, llm_client, memory
+from . import db, grounding, llm_client, memory
 from .question_bank import (
     DIAGNOSTIC_BY_DOMAIN,
     all_topics,
@@ -56,6 +56,19 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+async def _ground(state: dict, question: str, topic: str) -> tuple[str, str | None]:
+    """If this session targets a company, rewrite the question against real
+    reported context once it's ready (spec 5.4/7.7), and surface the unobtrusive
+    "now using real reports" note (spec 7.8). No-op (returns the base question,
+    no note) for sessions without a company or before grounding is ready — never
+    blocks, never leaks feedback (grounding.ground_question guarantees this)."""
+    slug = state.get("company_slug")
+    if not slug:
+        return question, None
+    grounded = await grounding.ground_question(question, slug, topic=topic)
+    return grounded, grounding.ui_note(slug)
+
+
 def _memory_text(sig: GradingSignal) -> str:
     """Natural-language statement fed to remember() so Cognee's cognify builds
     meaningful topic/signal graph nodes (raw JSON alone extracts poorly)."""
@@ -84,6 +97,12 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
 
     first = _is_first_session(req.domain_focus, user_id)
     diagnostic = DIAGNOSTIC_BY_DOMAIN.get(req.domain_focus, [])
+    # Phase 3 (spec 7.1): a company name kicks off background discovery/ingest
+    # immediately. ensure_company_context() returns fast (PENDING) — the actual
+    # fetch/filter/ingest runs detached, so this never blocks session start.
+    company_slug = grounding.company_slug(req.company) if req.company else None
+    if req.company:
+        await grounding.ensure_company_context(req.company, background=True)
     state = {
         "user_id": user_id,
         "domain": req.domain_focus,  # session mode: technical | behavioral | full
@@ -91,6 +110,7 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
         "diagnostic_queue": list(diagnostic) if first else [],
         "is_first_session": first,
         "current": None,
+        "company_slug": company_slug,
     }
     _ACTIVE[session_id] = state
 
@@ -100,14 +120,16 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
         topic = await _pick_next_topic(user_id, req.domain_focus, asked=[])
         q = question_for_topic(topic)
 
+    question_text, grounding_note = await _ground(state, q["question"], q["topic"])
     state["current"] = {
         "id": q["id"], "topic": q["topic"], "domain": q["domain"],
-        "question": q["question"], "is_follow_up": False,
+        "question": question_text, "is_follow_up": False,
     }
     state["asked_topics"].append(q["topic"])
     return StartSessionResponse(
         session_id=session_id, question_id=q["id"], topic=q["topic"],
-        question=q["question"], coding=is_coding(q["topic"]),
+        question=question_text, coding=is_coding(q["topic"]),
+        grounding_note=grounding_note,
     )
 
 
@@ -200,14 +222,16 @@ async def _advance(session_id: str, state: dict) -> AnswerResponse:
             return await _end(session_id, state["user_id"])
         q = question_for_topic(topic)
 
+    question_text, grounding_note = await _ground(state, q["question"], q["topic"])
     state["current"] = {
         "id": q["id"], "topic": q["topic"], "domain": q["domain"],
-        "question": q["question"], "is_follow_up": False,
+        "question": question_text, "is_follow_up": False,
     }
     state["asked_topics"].append(q["topic"])
     return AnswerResponse(
-        next_question_id=q["id"], topic=q["topic"], question=q["question"],
+        next_question_id=q["id"], topic=q["topic"], question=question_text,
         is_follow_up=False, coding=is_coding(q["topic"]),
+        grounding_note=grounding_note,
     )
 
 

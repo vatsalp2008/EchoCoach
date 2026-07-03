@@ -183,3 +183,24 @@ module ... in the React Client Manifest"). Fixed by explicitly pinning
 **Reason.** One-command startup is worth the root `package.json`, but the
 lockfile/workspace-root interaction is a real Next.js/Turbopack footgun worth
 documenting — anyone adding more root-level Node tooling should re-check this.
+
+## ADR-015 — Grounding built in isolation, wired in as a separate, later step
+**Context.** Phase 3 (external grounding) is the only remaining spec phase.
+Phase 1/2 were already working and tested; touching `session.py`/`main.py`
+directly while building Reddit/GitHub logic risked breaking that.
+**Decision.** `grounding.py` was written as a fully self-contained module —
+same "one auditable surface" pattern as `memory.py` — with zero imports from or
+into `session.py`/`grading.py`/`debrief.py`/`db.py`. Only after it worked
+standalone (compiled, imported cleanly, verified via its own smoke script) was
+it wired into `session.py`: `start_session()` calls
+`grounding.ensure_company_context()` (fire-and-forget) when a company is given,
+and every freshly-presented question is passed through
+`grounding.ground_question()` before being returned.
+**Tradeoff.** Two commits/steps instead of one; the company field looked
+"inert" for a while between the module existing and it being connected.
+**Reason.** This is `principle #1` from the original spec applied literally:
+"each phase must be a layer added on top of the previous one, never a rewrite
+of it." Building + wiring as separate steps meant Phase 1/2 was never at risk,
+and the wiring diff itself stayed small and easy to review (a handful of call
+sites in `session.py` plus two new response fields) rather than being tangled
+into a big first-draft of the grounding logic.

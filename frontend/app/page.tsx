@@ -69,6 +69,9 @@ export default function Home() {
   const [showBoard, setShowBoard] = useState(false);
   const [imageB64, setImageB64] = useState("");
 
+  // Phase 3: unobtrusive note once company-specific grounding kicks in (spec 7.8).
+  const [groundingNote, setGroundingNote] = useState<string | null>(null);
+
   // Restore a saved login (client-only) + feature-detect speech.
   useEffect(() => {
     const savedId = localStorage.getItem("echocoach_user");
@@ -170,6 +173,7 @@ export default function Home() {
         isFollowUp: false,
         coding: res.coding,
       });
+      setGroundingNote(res.grounding_note);
       setQNumber(1);
       setPhase("interview");
       proctor.start(); // begin focus monitoring for the session
@@ -212,6 +216,7 @@ export default function Home() {
         isFollowUp: res.is_follow_up,
         coding: res.coding,
       });
+      setGroundingNote(res.grounding_note);
       if (!res.is_follow_up) setQNumber((n) => n + 1);
       setPhase("interview");
     } catch (err) {
@@ -235,6 +240,7 @@ export default function Home() {
     setCurrent(null);
     setDebrief("");
     setQNumber(0);
+    setGroundingNote(null);
   }
 
   const inputCls =
@@ -445,6 +451,11 @@ export default function Home() {
                   dismiss
                 </button>
               </div>
+            )}
+            {groundingNote && (
+              <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-3 py-1.5">
+                🔎 {groundingNote}
+              </p>
             )}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-neutral-500">

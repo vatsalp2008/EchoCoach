@@ -40,6 +40,7 @@ export interface StartSessionResponse {
   topic: string;
   question: string;
   coding: boolean;
+  grounding_note: string | null;
 }
 
 export interface AnswerResponse {
@@ -48,6 +49,7 @@ export interface AnswerResponse {
   question: string | null;
   is_follow_up: boolean;
   coding: boolean;
+  grounding_note: string | null;
   done: boolean;
 }
 

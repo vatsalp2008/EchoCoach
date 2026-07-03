@@ -82,6 +82,7 @@ class StartSessionResponse(BaseModel):
     topic: str
     question: str
     coding: bool = False  # show a code editor for this question
+    grounding_note: Optional[str] = None  # spec 7.8: unobtrusive "using real reports" note
 
 
 class AnswerRequest(BaseModel):
@@ -101,4 +102,5 @@ class AnswerResponse(BaseModel):
     question: Optional[str] = None
     is_follow_up: bool = False
     coding: bool = False
+    grounding_note: Optional[str] = None
     done: bool = False

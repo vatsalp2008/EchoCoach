@@ -175,15 +175,35 @@ cd frontend && npm run dev
 - [x] **Demo readiness.** `README.md` (incl. mandatory AI-disclosure + How-we-used-Cognee),
       `docs/DECISIONS.md`, `scripts/seed_sessions.py` (seeds a shaped demo graph — run
       `seed_sessions.py demo`, then log in as `demo` and open `/graph`).
+- [x] **External grounding (Phase 3) — built AND wired in.** Sakshi built
+      `backend/app/grounding.py` (615 lines) as a fully isolated module — same "one
+      auditable surface" discipline as `memory.py` — for Reddit (PRAW) + GitHub
+      discovery, an LLM (with keyword-fallback) relevance filter, ingest into
+      `company_context:<slug>` via the existing `memory.remember()`, and background
+      polling via `memory.dataset_status()`. She deliberately did NOT touch
+      `session.py`/`main.py` (isolation — Phase 1/2 stays untouched and safe).
+      **Wired in afterward** (`session.py`): `start_session()` now calls
+      `grounding.ensure_company_context(company, background=True)` when a company is
+      given (returns instantly; the real fetch/filter/ingest runs detached); every
+      freshly-presented (non-follow-up) question is passed through
+      `grounding.ground_question()`, which rewrites it against real reported context
+      once ready and otherwise returns it unchanged; `StartSessionResponse`/
+      `AnswerResponse` gained `grounding_note` (spec 7.8's unobtrusive "now using real
+      reports from r/leetcode, GitHub" banner), shown in the frontend just above the
+      question. **Verified live** against a real company ("Stripe"): correctly skipped
+      Reddit (no creds — see `docs/reddit_api_setup.md`), found a real GitHub repo,
+      passed the LLM relevance filter, ingested into Cognee — cognify didn't finish
+      within the 80s poll window this run (a slow-cognify/quota timing issue, not a
+      wiring bug) and degraded to `Status.ERROR` exactly as designed: no crash, no
+      block, `grounding_note` stays hidden, the interview and debrief completed
+      normally throughout. **The company field is no longer inert.**
 
 ## 🚧 Remaining
-- [ ] **External grounding (Phase 3).** Reddit (PRAW) + GitHub → filter → `remember` into
-      `company_context:<slug>` in background, poll `get_status`, fallback-first. **The
-      company field on the setup screen is currently inert** until this lands. Creds guide:
-      `docs/reddit_api_setup.md`.
 - [ ] **UI polish pass** (deferred by decision — do after core features).
 - [ ] **Rehearsals** — 2 full run-throughs in Chrome before submission.
 - [ ] (nicety) `scripts/phase1_e2e.py` 2-session routing assertion when convenient.
+- [ ] (nicety) Set up real Reddit credentials (`docs/reddit_api_setup.md`) so grounding
+      isn't GitHub-only.
 
 ---
 
