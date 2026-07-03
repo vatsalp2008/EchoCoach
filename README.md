@@ -47,6 +47,7 @@ Why a **graph** and not a flat list: interview topics have genuine prerequisite/
 - **Voice mode** — Web Speech STT/TTS + a volume-driven avatar (text stays a fallback)
 - **Code editor** (Monaco) for DSA questions
 - **Whiteboard** — sketch a design; the multimodal grader (Gemini vision) sees it
+- **Company-specific grounding** — give a company name and, once ingested, questions get subtly rewritten against real reported interview experience (GitHub interview-question repos today; Reddit is supported in code but skipped by default — see `docs/reddit_api_setup.md` for why)
 - **Proctoring** — warns and tallies when you switch tabs / lose focus, like a real remote interview
 - **Fallback-first everywhere** — heuristic grading + template debrief keep a session alive even when the LLM quota is exhausted
 
@@ -97,4 +98,4 @@ Per the hackathon rules, we disclose that this project was built with the assist
 
 - `docs/DECISIONS.md` — architecture decision log (with trade-offs)
 - `PROGRESS.md` — build progress + gotchas for contributors
-- `docs/reddit_api_setup.md` — external-grounding credential setup (Phase 3)
+- `docs/reddit_api_setup.md` — external-grounding credential setup (Phase 3); also explains why Reddit is currently skipped

@@ -238,3 +238,28 @@ then it transcribes — so the accuracy upgrade was worth the dependency weight,
 especially with two independent kill switches (`ENABLE_WHISPER_STT=0` env var;
 the frontend simply defaults to and can always fall back to `"browser"`) so a
 broken install can never take down the app or block a demo.
+
+## ADR-017 — Skip Reddit grounding; GitHub-only for now
+**Context.** The spec assumed Reddit's classic self-serve API flow: create a
+"script" app at reddit.com/prefs/apps, get `client_id`/`client_secret`
+instantly, start querying. We verified this is no longer true: Reddit ended
+self-serve API key creation in **November 2025** under a new "Responsible
+Builder Policy." New access now requires applying through Reddit's Developer
+Support form and waiting for manual review — typically **2-4 weeks**.
+**Decision.** Skip Reddit for this submission rather than block on an external
+approval process with a timeline (2-4 weeks) far longer than the hackathon
+deadline. `grounding.py`'s code path is untouched — it still tries Reddit
+first on every request and only skips if credentials are absent — so this is
+purely a "don't pursue new credentials" call, not a code change. GitHub search
+needs no approval and was verified working live (found and ingested real
+interview-question repos for actual company names).
+**Tradeoff.** Company grounding is GitHub-only for this submission — narrower
+source coverage than the original two-source design.
+**Reason.** This is exactly the scenario the fallback-first principle (spec
+§7.9, §2.2) was built for: a missing external dependency degrades gracefully
+instead of blocking anything. If anyone on the team has Reddit API credentials
+predating November 2025, those still work and can be dropped into `.env` with
+zero code changes (see `docs/reddit_api_setup.md`) — otherwise, don't attempt
+new Reddit access before the deadline, and don't work around the block by
+scraping unauthenticated endpoints (also blocked as of May 2026, and against
+the same terms the API gate exists to enforce).

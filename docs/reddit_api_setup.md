@@ -1,43 +1,43 @@
-# Reddit API setup (Phase 3 grounding)
+# Reddit API setup (Phase 3 grounding) — currently skipped, here's why
 
-EchoCoach uses Reddit's **free** non-commercial API tier via PRAW to pull recent
-interview-experience threads for a target company. You only need a free Reddit
-account. ~5 minutes.
+**Status: not in use for this submission.** The code path is fully built and
+still tries Reddit first on every grounding request (see `backend/app/
+grounding.py`), but as of **November 2025, Reddit ended self-serve API key
+creation**. Creating an app at reddit.com/prefs/apps no longer hands you a
+`client_id`/`client_secret` instantly — new access now requires applying
+through Reddit's Developer Support form under their "Responsible Builder
+Policy" and waiting for manual review, typically **2-4 weeks**. That's
+incompatible with a hackathon deadline, so we made the call to skip it rather
+than block on an external approval process we can't control.
 
-## Steps
-1. **Log in to Reddit** with any account at https://www.reddit.com.
-2. Go to **https://www.reddit.com/prefs/apps** (Settings → scroll to "Developed Applications").
-3. Click **"are you a developer? create an app…"** (or **"Create Another App"**).
-4. Fill in the form:
-   - **name:** `echocoach`
-   - **type:** select **`script`** (this is the important one — it's for personal-use scripts).
-   - **description:** optional, e.g. "interview prep memory app".
-   - **about url:** leave blank.
-   - **redirect uri:** `http://localhost:8080` (required field; value is unused for a script app).
-5. Click **"create app"**.
-6. Read the credentials off the created app box:
-   - **client id** — the short string shown *directly under the app name* / under the words "personal use script" (a ~14-char string).
-   - **client secret** — the value labeled **`secret`**.
+This is exactly the scenario the fallback-first design was built for
+(spec §7.9): missing Reddit credentials are treated as a normal, permanent
+condition, not an error — grounding silently falls back to **GitHub-only**
+search, which needs no approval and works today (verified live against real
+companies). The interview and demo are never blocked by this.
 
-## Put them in `.env`
+## If you already have pre-November-2025 Reddit API credentials
+Old credentials created before the policy change still work. If you (or
+anyone on the team) has an old Reddit "script" app from a prior personal
+project, its `client_id`/`client_secret` can be dropped straight into `.env`:
 ```
-REDDIT_CLIENT_ID=<the short id under the app name>
-REDDIT_CLIENT_SECRET=<the secret value>
+REDDIT_CLIENT_ID=<existing client id>
+REDDIT_CLIENT_SECRET=<existing client secret>
 REDDIT_USER_AGENT=echocoach:v1.0 (by /u/<your_reddit_username>)
 ```
-- The **user agent must be unique and descriptive** and include your username —
-  Reddit rate-limits/blocks generic agents. Replace `<your_reddit_username>`.
-- No password/OAuth-web flow is needed: a `script` app with id+secret uses
-  read-only "application-only" auth, which is all we need for public search.
+No code changes needed — `grounding.py` will pick them up automatically and
+start using Reddit alongside GitHub the next time the backend starts.
 
-## Notes / limits
-- Free tier is ~100 queries/min — far more than we use (we cap at 5–6 results per company).
-- We only **read** public posts; we never post or scrape logged-in-only content.
-- Per spec §7.3 we deliberately do **not** touch Glassdoor, Blind, or LeetCode Discuss.
-- If creds are missing or a call fails, Phase 3 silently falls back to the
-  hardcoded question bank — the interview never blocks on Reddit.
+## Do not work around this by scraping
+Don't fetch Reddit's `.json` endpoints without authentication as a workaround
+— unauthenticated scraping was also blocked (returns 403) as of May 2026, and
+it would violate the same terms the API access requires anyway. Per spec §7.3
+we already exclude Glassdoor, Blind, and LeetCode Discuss for the same reason
+(scraping-prohibited or unclear-terms sources) — Reddit-without-a-key now
+belongs in that same "don't" list.
 
-## GitHub token (optional, same phase)
-Only needed to raise search rate limits. Create a **fine-grained or classic PAT**
-with **no scopes** (public read is enough) at
-https://github.com/settings/tokens → put it in `.env` as `GITHUB_TOKEN=`.
+## GitHub token (optional, unaffected by any of this)
+Only needed to raise search rate limits — no approval process, works today.
+Create a **fine-grained or classic PAT** with **no scopes** (public read is
+enough) at https://github.com/settings/tokens → put it in `.env` as
+`GITHUB_TOKEN=`.

@@ -1,9 +1,11 @@
 # EchoCoach — Build Progress (teammate reference)
 
 Living doc of **what's done** and **what's left**. Update it as you land work.
-Last verified: core loop + Phase 2 + voice + code editor + whiteboard + proctoring
-+ ID+PIN login for 2 users + single `npm run dev` all working end-to-end; README +
-demo seed done. Only external grounding (Reddit/GitHub) and UI polish remain.
+Last verified: core loop + Phase 2 + voice (browser + local Whisper) + code editor
++ whiteboard + proctoring + ID+PIN login for 2 users + single `npm run dev` +
+GitHub-based company grounding all working end-to-end; README + demo seed done.
+Reddit grounding is intentionally skipped (see ADR-017). Only UI polish + demo
+rehearsals remain.
 
 ---
 
@@ -204,6 +206,12 @@ cd frontend && npm run dev
       wiring bug) and degraded to `Status.ERROR` exactly as designed: no crash, no
       block, `grounding_note` stays hidden, the interview and debrief completed
       normally throughout. **The company field is no longer inert.**
+      **UPDATE: Reddit is intentionally skipped for this submission** — Reddit
+      ended self-serve API key creation in Nov 2025 (2-4 week manual approval
+      now required, incompatible with the deadline). No code change: `grounding.py`
+      still tries Reddit first and just always hits the "missing credentials"
+      skip path. Grounding is **GitHub-only** for now. See ADR-017 and
+      `docs/reddit_api_setup.md`.
 - [x] **Local Whisper STT (second, opt-in voice engine).** `backend/app/stt.py`
       wraps `mlx-whisper` (model `mlx-community/whisper-large-v3-turbo-q4`, Apple
       Silicon GPU-accelerated) behind the same singleton/guarded-import pattern as
@@ -236,8 +244,10 @@ cd frontend && npm run dev
 - [ ] (nicety) Before any real demo: run `/api/transcribe` once on the demo
       machine/network to populate the HF cache, then set `HF_HUB_OFFLINE=1` so
       the demo run can't stall checking venue wifi for model updates.
-- [ ] (nicety) Set up real Reddit credentials (`docs/reddit_api_setup.md`) so grounding
-      isn't GitHub-only.
+- [ ] (won't-fix for this submission) Reddit grounding — blocked on a 2-4 week
+      external approval process (see ADR-017), not something we can resolve
+      before the deadline. Only revisit if someone already has pre-Nov-2025
+      Reddit API credentials.
 
 ---
 
@@ -248,7 +258,7 @@ echocoach_build_spec.md      full spec
 PROGRESS.md                  this file
 package.json                 root — `npm run dev` runs backend+frontend via concurrently
 docs/DECISIONS.md            ADR log (with tradeoffs)
-docs/reddit_api_setup.md     Phase 3 creds guide
+docs/reddit_api_setup.md     Phase 3 creds guide + why Reddit is skipped (ADR-017)
 .env.example / .env          env template / real secrets (gitignored) — incl. PIN_VATSAL/PIN_SAKSHI
 backend/
   requirements.txt
