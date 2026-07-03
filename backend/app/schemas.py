@@ -81,6 +81,7 @@ class StartSessionResponse(BaseModel):
     question_id: str
     topic: str
     question: str
+    domain: Domain = "technical"  # lets the UI gate domain-specific tools (e.g. whiteboard)
     coding: bool = False  # show a code editor for this question
     grounding_note: Optional[str] = None  # spec 7.8: unobtrusive "using real reports" note
 
@@ -100,6 +101,7 @@ class AnswerResponse(BaseModel):
     next_question_id: Optional[str] = None
     topic: Optional[str] = None
     question: Optional[str] = None
+    domain: Domain = "technical"
     is_follow_up: bool = False
     coding: bool = False
     grounding_note: Optional[str] = None

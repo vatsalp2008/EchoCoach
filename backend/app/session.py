@@ -128,7 +128,7 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
     state["asked_topics"].append(q["topic"])
     return StartSessionResponse(
         session_id=session_id, question_id=q["id"], topic=q["topic"],
-        question=question_text, coding=is_coding(q["topic"]),
+        question=question_text, domain=q["domain"], coding=is_coding(q["topic"]),
         grounding_note=grounding_note,
     )
 
@@ -174,7 +174,7 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
         }
         return AnswerResponse(
             next_question_id=fu_id, topic=topic, question=fu_text,
-            is_follow_up=True, coding=is_coding(topic),
+            domain=current["domain"], is_follow_up=True, coding=is_coding(topic),
         )
 
     if not skip_follow_up and sig.follow_up_needed and not resolved and count >= FOLLOW_UP_CAP:
@@ -230,7 +230,7 @@ async def _advance(session_id: str, state: dict) -> AnswerResponse:
     state["asked_topics"].append(q["topic"])
     return AnswerResponse(
         next_question_id=q["id"], topic=q["topic"], question=question_text,
-        is_follow_up=False, coding=is_coding(q["topic"]),
+        domain=q["domain"], is_follow_up=False, coding=is_coding(q["topic"]),
         grounding_note=grounding_note,
     )
 

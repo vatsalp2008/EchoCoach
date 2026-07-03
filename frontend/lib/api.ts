@@ -39,6 +39,7 @@ export interface StartSessionResponse {
   question_id: string;
   topic: string;
   question: string;
+  domain: Domain;
   coding: boolean;
   grounding_note: string | null;
 }
@@ -47,6 +48,7 @@ export interface AnswerResponse {
   next_question_id: string | null;
   topic: string | null;
   question: string | null;
+  domain: Domain;
   is_follow_up: boolean;
   coding: boolean;
   grounding_note: string | null;

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   AnswerResponse,
+  Domain,
   getDebrief,
   getProfiles,
   login,
@@ -30,6 +31,7 @@ interface CurrentQ {
   questionId: string;
   topic: string;
   question: string;
+  domain: Domain;
   isFollowUp: boolean;
   coding: boolean;
 }
@@ -170,6 +172,7 @@ export default function Home() {
         questionId: res.question_id,
         topic: res.topic,
         question: res.question,
+        domain: res.domain,
         isFollowUp: false,
         coding: res.coding,
       });
@@ -213,6 +216,7 @@ export default function Home() {
         questionId: res.next_question_id!,
         topic: res.topic!,
         question: res.question!,
+        domain: res.domain,
         isFollowUp: res.is_follow_up,
         coding: res.coding,
       });
@@ -530,7 +534,7 @@ export default function Home() {
               />
             )}
 
-            {showBoard && !current.coding && (
+            {showBoard && current.domain === "technical" && !current.coding && (
               <Whiteboard onChange={setImageB64} />
             )}
 
@@ -542,7 +546,7 @@ export default function Home() {
               >
                 Submit answer
               </button>
-              {!current.coding && (
+              {current.domain === "technical" && !current.coding && (
                 <button
                   type="button"
                   onClick={() => setShowBoard((s) => !s)}
