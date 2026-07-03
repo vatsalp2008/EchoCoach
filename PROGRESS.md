@@ -68,6 +68,17 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
    fire-and-forget, `asyncio.wait_for`-bounded (45s), and circuit-broken (300s cooldown
    after a quota failure). `run_in_background=True` is NOT enough: it hides the
    exception so the breaker can't trip and the retry storms pile up.
+9. **Bug found live + fixed: heuristic grading substring false-positive.**
+   `grading.py`'s no-LLM fallback (`_heuristic_assessment`, used whenever Gemini
+   quota is exhausted — which happens often given gotcha #6) checked dodge markers
+   with naive `"pass" in text` / `"skip" in text`. This matched **inside real
+   words** — e.g. "impasse" contains "pass" — so a full, detailed, well-structured
+   behavioral answer got graded `avoided` just because it used the word "impasse."
+   Fixed with `\b`-word-boundary regexes (`_HEDGE_PATTERNS` / `_DODGE_PATTERNS`).
+   **Lesson: any future heuristic/text-matching code must use word boundaries, not
+   raw substring `in` checks.** Editing `grading.py` triggers uvicorn `--reload`,
+   which wipes in-memory `_ACTIVE` sessions — anyone mid-interview when this kind
+   of fix lands needs to restart their session (turn state isn't persisted).
 
 ## Hackathon compliance (don't lose points / get DQ'd)
 - **MUST disclose AI-assistant use (Claude Code) in the README** — non-disclosure is

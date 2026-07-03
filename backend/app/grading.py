@@ -7,6 +7,7 @@ mid-session (spec 5.3a).
 from __future__ import annotations
 
 import json
+import re
 
 from . import llm_client
 from .schemas import Domain, GradingAssessment, GradingSignal
@@ -15,6 +16,13 @@ _HEDGE_WORDS = ("i think", "maybe", "probably", "i'm not sure", "im not sure",
                 "i guess", "kind of", "sort of", "not sure")
 _DODGE_MARKERS = ("no idea", "don't know", "dont know", "not sure", "skip",
                   "pass", "can't answer", "cant answer")
+
+# Word-boundary regexes, not naive substrings — "pass" must not match inside
+# "impasse", "skip" must not match inside "skipper", etc. (bug found live: a
+# detailed, fully-answered "conflict story" got misgraded as "avoided" because
+# "impasse" contains "pass".)
+_HEDGE_PATTERNS = [re.compile(r"\b" + re.escape(w) + r"\b") for w in _HEDGE_WORDS]
+_DODGE_PATTERNS = [re.compile(r"\b" + re.escape(m) + r"\b") for m in _DODGE_MARKERS]
 
 # The JSON schema the grader must return (spec 4.2). Shown to the model as-is;
 # the app overrides session_id/timestamp/topic/domain authoritatively after.
@@ -139,8 +147,8 @@ def _heuristic_assessment(transcript: str) -> GradingAssessment:
     Never claims 'mastered' without a real grade."""
     t = transcript.strip().lower()
     words = t.split()
-    hedges = sum(t.count(h) for h in _HEDGE_WORDS)
-    if not words or any(m in t for m in _DODGE_MARKERS):
+    hedges = sum(len(p.findall(t)) for p in _HEDGE_PATTERNS)
+    if not words or any(p.search(t) for p in _DODGE_PATTERNS):
         signal, focus = "avoided", "attempt the question at all"
     elif len(words) < 20:
         signal, focus = "struggled", "give a fuller, more concrete answer"
