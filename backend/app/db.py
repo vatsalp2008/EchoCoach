@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     ended_at     TEXT,
     domain_focus TEXT NOT NULL,
     company      TEXT,
-    target_role  TEXT
+    target_role  TEXT,
+    debrief      TEXT            -- frozen debrief markdown (history shows the original)
 );
 CREATE TABLE IF NOT EXISTS follow_up_counters (
     session_id TEXT NOT NULL,
@@ -88,6 +89,11 @@ def connect() -> Iterator[sqlite3.Connection]:
 def init_db() -> None:
     with connect() as conn:
         conn.executescript(_SCHEMA)
+        # Lightweight migration for DBs created before the debrief column existed.
+        try:
+            conn.execute("ALTER TABLE sessions ADD COLUMN debrief TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already present
         for q in ALL_QUESTIONS:
             conn.execute(
                 "INSERT OR REPLACE INTO question_bank(id, domain, topic, question_text, difficulty) "
@@ -160,6 +166,34 @@ def end_session(session_id: str, ended_at: str) -> None:
 def get_session(session_id: str) -> sqlite3.Row | None:
     with connect() as conn:
         return conn.execute("SELECT * FROM sessions WHERE id=?", (session_id,)).fetchone()
+
+
+def list_sessions(user_id: str) -> list[dict]:
+    """A user's past sessions, newest first, with a question count — for the
+    History page. Only sessions that actually asked something are included."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT s.id, s.started_at, s.ended_at, s.domain_focus, s.company, "
+            "  (SELECT COUNT(*) FROM qa_log q WHERE q.session_id = s.id) AS n_questions "
+            "FROM sessions s WHERE s.user_id = ? ORDER BY s.started_at DESC",
+            (user_id,),
+        ).fetchall()
+    return [dict(r) for r in rows if r["n_questions"] > 0]
+
+
+def get_stored_debrief(session_id: str) -> str | None:
+    with connect() as conn:
+        row = conn.execute(
+            "SELECT debrief FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        return row["debrief"] if row else None
+
+
+def store_debrief(session_id: str, markdown: str) -> None:
+    with connect() as conn:
+        conn.execute(
+            "UPDATE sessions SET debrief = ? WHERE id = ?", (markdown, session_id)
+        )
 
 
 # ── follow-up counters (spec 5.3, cap = 2) ───────────────────────────────────

@@ -147,6 +147,12 @@ async def get_debrief(session_id: str) -> dict:
     return {"session_id": session_id, "debrief": report}
 
 
+@app.get("/api/sessions")
+async def sessions(user: dict = Depends(current_user)) -> dict:
+    """The logged-in user's past sessions (newest first) for the History page."""
+    return {"sessions": db.list_sessions(user["id"])}
+
+
 @app.get("/api/session/{session_id}/qa")
 async def get_qa(session_id: str) -> dict:
     """Full transcript for the debrief's Questions & Answers view: every question

@@ -47,6 +47,13 @@ Return only the markdown report, nothing else."""
 
 
 async def generate_debrief(session_id: str) -> str:
+    # Return the frozen debrief if we've generated one before, so re-viewing a
+    # past session (History) shows exactly what the candidate originally saw —
+    # and doesn't re-spend LLM quota on every view.
+    stored = db.get_stored_debrief(session_id)
+    if stored:
+        return stored
+
     signals = db.signals_for_session(session_id)
     if not signals:
         return "No answers were recorded this session, so there's nothing to debrief yet."
@@ -70,9 +77,11 @@ async def generate_debrief(session_id: str) -> str:
         prior=prior,
     )
     try:
-        return await llm_client.generate(prompt, temperature=0.4)
+        report = await llm_client.generate(prompt, temperature=0.4)
     except LLMQuotaError:
-        return _template_debrief(signals, questions)
+        report = _template_debrief(signals, questions)
+    db.store_debrief(session_id, report)  # freeze the original for History
+    return report
 
 
 def _template_debrief(signals: list[dict], questions: dict[str, str]) -> str:
