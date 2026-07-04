@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import { useTheme } from "next-themes";
 import { getGraph, GraphData, GraphNode } from "@/lib/api";
+import { useAuth } from "@/components/AuthProvider";
 
 // react-force-graph-2d touches window/canvas - load client-only.
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
@@ -33,15 +35,18 @@ const LEGEND: { label: string; color: string }[] = [
 ];
 
 export default function WeaknessGraph() {
+  const { user, loading } = useAuth();
+  const { resolvedTheme } = useTheme();
+  const dark = resolvedTheme === "dark";
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 800, h: 560 });
   const [data, setData] = useState<GraphData | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const user = localStorage.getItem("echocoach_user") || "default_user";
-    getGraph(user).then(setData).catch((e) => setError(String(e)));
-  }, []);
+    if (!user) return;
+    getGraph(user.id).then(setData).catch((e) => setError(String(e)));
+  }, [user]);
 
   useEffect(() => {
     if (!wrapRef.current) return;
@@ -60,9 +65,13 @@ export default function WeaknessGraph() {
       }
     : { nodes: [], links: [] };
 
+  const labelColor = dark ? "#cbd5e1" : "#334155";
+  const linkColor = dark ? "#1e293b" : "#e2e8f0";
+  const bgColor = dark ? "#0f172a" : "#ffffff";
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-neutral-600">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
         {LEGEND.map((l) => (
           <span key={l.label} className="inline-flex items-center gap-1.5">
             <span
@@ -75,22 +84,26 @@ export default function WeaknessGraph() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300">
           {error}
         </div>
       )}
 
       <div
         ref={wrapRef}
-        className="h-[560px] w-full overflow-hidden rounded-xl border border-neutral-200 bg-white"
+        className="h-[560px] w-full overflow-hidden rounded-xl border border-border bg-surface"
       >
-        {data && data.nodes.length > 0 ? (
+        {!loading && !user ? (
+          <div className="grid h-full place-items-center px-6 text-center text-sm text-muted">
+            Log in to see your weakness graph.
+          </div>
+        ) : data && data.nodes.length > 0 ? (
           <ForceGraph2D
             width={size.w}
             height={size.h}
             graphData={graphData}
-            backgroundColor="#ffffff"
-            linkColor={() => "#e2e8f0"}
+            backgroundColor={bgColor}
+            linkColor={() => linkColor}
             linkWidth={1.5}
             nodeRelSize={5}
             nodeVal={(n: any) => 4 + (n.interactions ?? 0)}
@@ -106,14 +119,14 @@ export default function WeaknessGraph() {
               ctx.fill();
               const fs = Math.max(10 / scale, 3);
               ctx.font = `${fs}px sans-serif`;
-              ctx.fillStyle = "#334155";
+              ctx.fillStyle = labelColor;
               ctx.textAlign = "center";
               ctx.textBaseline = "top";
               ctx.fillText(n.label, n.x, n.y + r + 1);
             }}
           />
         ) : (
-          <div className="grid h-full place-items-center text-sm text-neutral-400">
+          <div className="grid h-full place-items-center text-sm text-muted">
             {data ? "No topics yet - run a session first." : "Loading graph…"}
           </div>
         )}

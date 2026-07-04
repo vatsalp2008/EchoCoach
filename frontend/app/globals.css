@@ -1,23 +1,63 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+/* Enable class-based dark mode (next-themes sets class="dark" on <html>). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Design tokens: Indigo accent on a slate neutral ramp ──────────────────
+   Semantic names (surface/foreground/muted/border/primary/…) so components
+   never hardcode colors and light↔dark is a single source of truth. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f8fafc;        /* slate-50  */
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;         /* slate-100 subtle fills */
+  --foreground: #0f172a;        /* slate-900 */
+  --muted: #64748b;             /* slate-500 */
+  --border: #e2e8f0;            /* slate-200 */
+  --primary: #4f46e5;           /* indigo-600 */
+  --primary-hover: #4338ca;     /* indigo-700 */
+  --primary-foreground: #ffffff;
+  --primary-subtle: #eef2ff;    /* indigo-50 */
+  --ring: #6366f1;              /* indigo-500 */
+}
+
+.dark {
+  --background: #0a0a0a;        /* neutral-950 — true black, no blue tint */
+  --surface: #171717;           /* neutral-900 */
+  --surface-2: #262626;         /* neutral-800 */
+  --foreground: #fafafa;        /* neutral-50 */
+  --muted: #a3a3a3;             /* neutral-400 */
+  --border: #2a2a2a;            /* ~neutral-800 */
+  --primary: #6366f1;           /* indigo-500 accent (kept) */
+  --primary-hover: #818cf8;     /* indigo-400 */
+  --primary-foreground: #ffffff;
+  --primary-subtle: #312e81;    /* indigo-900 — accent chip on a neutral bg */
+  --ring: #818cf8;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-ring: var(--ring);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-/* Light theme only for now (a dark toggle can come later). We intentionally do
-   NOT switch on prefers-color-scheme so the UI stays light regardless of OS. */
+html {
+  color-scheme: light dark;
+}
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }

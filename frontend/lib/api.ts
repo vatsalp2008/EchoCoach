@@ -1,39 +1,69 @@
 // Thin client for the EchoCoach backend. Base URL is overridable via
 // NEXT_PUBLIC_API_BASE; defaults to the local FastAPI dev server.
+// Every call sends credentials so the HttpOnly session cookie flows.
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
 
 export type Domain = "technical" | "behavioral";
 export type SessionMode = "technical" | "behavioral" | "full";
 
-export interface Profile {
-  user_id: string;
-  display_name: string;
-}
-
-export interface LoginResponse {
-  user_id: string;
-  display_name: string;
-}
-
-export async function getProfiles(): Promise<Profile[]> {
-  const res = await fetch(`${API_BASE}/api/profiles`);
-  if (!res.ok) throw new Error(`profiles failed: ${res.status}`);
-  return res.json() as Promise<Profile[]>;
-}
-
-export async function login(user_id: string, pin: string): Promise<LoginResponse> {
-  const res = await fetch(`${API_BASE}/api/login`, {
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_id, pin }),
+    credentials: "include",
+    body: JSON.stringify(body),
   });
   if (!res.ok) {
-    if (res.status === 401) throw new Error("Wrong ID or PIN.");
-    throw new Error(`login failed: ${res.status}`);
+    let detail = "";
+    try {
+      detail = (await res.json())?.detail ?? "";
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail || `${path} failed: ${res.status}`);
   }
-  return res.json() as Promise<LoginResponse>;
+  return res.json() as Promise<T>;
 }
 
+async function getJson<T>(path: string): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });
+  if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+// ── auth ──────────────────────────────────────────────────────────────────
+export interface User {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
+export function signup(display_name: string, email: string, password: string) {
+  return post<User>("/api/signup", { display_name, email, password });
+}
+
+export function login(email: string, password: string) {
+  return post<User>("/api/login", { email, password });
+}
+
+/** Exchange a Google ID token (from the GIS button) for a session. */
+export function googleSignin(credential: string) {
+  return post<User>("/api/auth/google", { credential });
+}
+
+export function logout() {
+  return post<{ ok: boolean }>("/api/logout", {});
+}
+
+/** Current user from the session cookie, or null if logged out (401). */
+export async function getMe(): Promise<User | null> {
+  const res = await fetch(`${API_BASE}/api/me`, { credentials: "include" });
+  if (res.status === 401) return null;
+  if (!res.ok) throw new Error(`me failed: ${res.status}`);
+  return res.json() as Promise<User>;
+}
+
+// ── session / interview ─────────────────────────────────────────────────────
 export interface StartSessionResponse {
   session_id: string;
   question_id: string;
@@ -55,21 +85,10 @@ export interface AnswerResponse {
   done: boolean;
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`${path} failed: ${res.status}`);
-  return res.json() as Promise<T>;
-}
-
 export function startSession(input: {
   target_role: string;
   company?: string;
   domain_focus?: SessionMode;
-  user_id?: string;
 }) {
   return post<StartSessionResponse>("/api/session", input);
 }
@@ -84,21 +103,7 @@ export function submitAnswer(input: {
   return post<AnswerResponse>("/api/answer", input);
 }
 
-export interface QAItem {
-  topic: string;
-  is_follow_up: boolean;
-  question: string;
-  answer: string;
-  skipped: boolean;
-}
-
-export async function getSessionQA(sessionId: string): Promise<QAItem[]> {
-  const res = await fetch(`${API_BASE}/api/session/${sessionId}/qa`);
-  if (!res.ok) throw new Error(`qa failed: ${res.status}`);
-  const data = (await res.json()) as { qa: QAItem[] };
-  return data.qa;
-}
-
+// ── weakness graph ──────────────────────────────────────────────────────────
 export interface GraphNode {
   id: string;
   label: string;
@@ -114,19 +119,30 @@ export interface GraphData {
   edges: { source: string; target: string }[];
 }
 
-export async function getGraph(user = "default_user"): Promise<GraphData> {
-  const res = await fetch(`${API_BASE}/api/graph?user=${encodeURIComponent(user)}`);
-  if (!res.ok) throw new Error(`graph failed: ${res.status}`);
-  return res.json() as Promise<GraphData>;
+export function getGraph(user: string): Promise<GraphData> {
+  return getJson<GraphData>(`/api/graph?user=${encodeURIComponent(user)}`);
 }
 
+// ── debrief + Q&A ─────────────────────────────────────────────────────────
 export async function getDebrief(sessionId: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/session/${sessionId}/debrief`);
-  if (!res.ok) throw new Error(`debrief failed: ${res.status}`);
-  const data = (await res.json()) as { debrief: string };
+  const data = await getJson<{ debrief: string }>(`/api/session/${sessionId}/debrief`);
   return data.debrief;
 }
 
+export interface QAItem {
+  topic: string;
+  is_follow_up: boolean;
+  question: string;
+  answer: string;
+  skipped: boolean;
+}
+
+export async function getSessionQA(sessionId: string): Promise<QAItem[]> {
+  const data = await getJson<{ qa: QAItem[] }>(`/api/session/${sessionId}/qa`);
+  return data.qa;
+}
+
+// ── speech-to-text ─────────────────────────────────────────────────────────
 export interface TranscribeResponse {
   transcript: string;
 }
@@ -136,7 +152,5 @@ export function transcribeAudio(audio_b64: string, format = "webm") {
 }
 
 export async function sttStatus(): Promise<{ available: boolean; model: string }> {
-  const res = await fetch(`${API_BASE}/api/stt/status`);
-  if (!res.ok) throw new Error(`stt status failed: ${res.status}`);
-  return res.json();
+  return getJson<{ available: boolean; model: string }>("/api/stt/status");
 }

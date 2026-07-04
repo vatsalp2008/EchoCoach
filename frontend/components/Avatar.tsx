@@ -79,7 +79,7 @@ export default function Avatar({
       >
         <span className="text-white text-lg font-semibold tracking-wide">EC</span>
       </div>
-      <span className="text-xs text-neutral-500">
+      <span className="text-xs text-muted">
         {clickable && !speaking && !listening ? "Tap to replay" : label}
       </span>
     </div>

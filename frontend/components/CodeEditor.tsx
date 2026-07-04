@@ -2,12 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useState } from "react";
+import { useTheme } from "next-themes";
 
 // Monaco is client-only and heavy - load it lazily.
 const Monaco = dynamic(() => import("@monaco-editor/react"), {
   ssr: false,
   loading: () => (
-    <div className="grid h-[280px] place-items-center text-sm text-neutral-400">
+    <div className="grid h-[280px] place-items-center text-sm text-muted">
       Loading editor…
     </div>
   ),
@@ -23,6 +24,7 @@ export default function CodeEditor({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const { resolvedTheme } = useTheme();
   const [lang, setLang] = useState("python");
   const [code, setCode] = useState("");
 
@@ -32,16 +34,16 @@ export default function CodeEditor({
   }
 
   return (
-    <div className="rounded-lg border border-neutral-300 overflow-hidden">
-      <div className="flex items-center justify-between border-b border-neutral-200 bg-neutral-100 px-3 py-1.5">
-        <span className="text-xs text-neutral-500">Code editor</span>
+    <div className="overflow-hidden rounded-lg border border-border">
+      <div className="flex items-center justify-between border-b border-border bg-surface-2 px-3 py-1.5">
+        <span className="text-xs text-muted">Code editor</span>
         <select
           value={lang}
           onChange={(e) => {
             setLang(e.target.value);
             emit(code, e.target.value);
           }}
-          className="rounded border border-neutral-300 bg-white px-2 py-1 text-xs"
+          className="rounded border border-border bg-surface px-2 py-1 text-xs text-foreground"
         >
           {LANGS.map((l) => (
             <option key={l} value={l}>
@@ -53,7 +55,7 @@ export default function CodeEditor({
       <Monaco
         height="300px"
         language={lang}
-        theme="vs-light"
+        theme={resolvedTheme === "dark" ? "vs-dark" : "vs-light"}
         value={code}
         onChange={(v) => emit(v ?? "", lang)}
         options={{

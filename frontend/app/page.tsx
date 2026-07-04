@@ -6,10 +6,7 @@ import {
   AnswerResponse,
   Domain,
   getDebrief,
-  getProfiles,
   getSessionQA,
-  login,
-  Profile,
   QAItem,
   SessionMode,
   startSession,
@@ -33,16 +30,9 @@ import Avatar from "@/components/Avatar";
 import CodeEditor from "@/components/CodeEditor";
 import Whiteboard from "@/components/Whiteboard";
 import { useProctor } from "@/lib/useProctor";
+import { useAuth } from "@/components/AuthProvider";
 
-type Phase = "login" | "setup" | "intro" | "interview" | "loading" | "debrief";
-
-// mm:ss for the live session timer.
-function fmtDuration(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toString().padStart(2, "0")}`;
-}
+type Phase = "setup" | "intro" | "interview" | "loading" | "debrief";
 
 interface CurrentQ {
   questionId: string;
@@ -53,25 +43,33 @@ interface CurrentQ {
   coding: boolean;
 }
 
+// mm:ss for the live session timer.
+function fmtDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// ── shared control styles (design tokens) ──────────────────────────────────
+const inputCls =
+  "w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-base text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/40 placeholder:text-muted/60";
+const labelCls = "block text-[15px] font-medium text-foreground mb-1.5";
+const primaryBtn =
+  "rounded-xl bg-primary px-5 py-2.5 text-base font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed";
+const ghostBtn =
+  "rounded-xl border border-border px-5 py-2.5 text-base font-medium text-foreground transition hover:bg-surface-2 disabled:opacity-50";
+const card = "rounded-2xl border border-border bg-surface p-6 shadow-sm";
+
 export default function Home() {
-  const [phase, setPhase] = useState<Phase>("login");
+  const { user, openLogin } = useAuth();
 
-  // Login (ID + PIN, 2 known users - see backend/app/auth.py).
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [userId, setUserId] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [selectedProfile, setSelectedProfile] = useState<string>("");
-  const [pin, setPin] = useState("");
-  const [loginError, setLoginError] = useState("");
-  const [loggingIn, setLoggingIn] = useState(false);
-
+  const [phase, setPhase] = useState<Phase>("setup");
   const [role, setRole] = useState("");
   const [company, setCompany] = useState("");
   const [domain, setDomain] = useState<SessionMode>("technical");
   const [sessionId, setSessionId] = useState("");
   const [current, setCurrent] = useState<CurrentQ | null>(null);
-  // The last main (non-follow-up) question, kept so it can be shown as context
-  // while the interviewer probes it with follow-ups.
   const [mainQuestion, setMainQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [qNumber, setQNumber] = useState(0);
@@ -83,7 +81,7 @@ export default function Home() {
   const [showQA, setShowQA] = useState(false);
   const [qaLoading, setQaLoading] = useState(false);
 
-  // Live session timer (client-only; no backend involvement).
+  // Live session timer (client-only).
   const [elapsedMs, setElapsedMs] = useState(0);
   const sessionStartRef = useRef<number | null>(null);
 
@@ -96,76 +94,27 @@ export default function Home() {
   const spokenFor = useRef<string>("");
   const proctor = useProctor();
 
-  // STT engine choice: browser (Web Speech, live transcript) vs whisper
-  // (record -> upload -> server transcribes). Browser stays the default -
-  // least risk to the already-working path (spec-style: additive, not a swap).
   const [sttEngine, setSttEngine] = useState<"browser" | "whisper">("browser");
   const [whisperAvail, setWhisperAvail] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
 
-  // Whiteboard sketch (optional, non-coding questions).
   const [showBoard, setShowBoard] = useState(false);
   const [imageB64, setImageB64] = useState("");
-
-  // Phase 3: unobtrusive note once company-specific grounding kicks in (spec 7.8).
   const [groundingNote, setGroundingNote] = useState<string | null>(null);
 
-  // Restore a saved login (client-only) + feature-detect speech.
+  // Feature-detect speech engines once.
   useEffect(() => {
-    const savedId = localStorage.getItem("echocoach_user");
-    const savedName = localStorage.getItem("echocoach_display_name");
-    if (savedId && savedName) {
-      setUserId(savedId);
-      setDisplayName(savedName);
-      setPhase("setup");
-    } else {
-      getProfiles()
-        .then(setProfiles)
-        .catch(() => setLoginError("Could not reach the server. Is the backend running?"));
-    }
     const browserOk = speechSupported();
     setVoiceAvail(browserOk || recordingSupported());
     sttStatus()
       .then((s) => {
         setWhisperAvail(s.available);
-        // Default to whichever works; prefer Browser when both do (least risk).
         if (!browserOk && s.available) setSttEngine("whisper");
       })
       .catch(() => setWhisperAvail(false));
   }, []);
 
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedProfile || !pin.trim()) return;
-    setLoginError("");
-    setLoggingIn(true);
-    try {
-      const res = await login(selectedProfile, pin.trim());
-      localStorage.setItem("echocoach_user", res.user_id);
-      localStorage.setItem("echocoach_display_name", res.display_name);
-      setUserId(res.user_id);
-      setDisplayName(res.display_name);
-      setPin("");
-      setPhase("setup");
-    } catch (err) {
-      setLoginError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setLoggingIn(false);
-    }
-  }
-
-  function logout() {
-    localStorage.removeItem("echocoach_user");
-    localStorage.removeItem("echocoach_display_name");
-    setUserId("");
-    setDisplayName("");
-    setSelectedProfile("");
-    setPin("");
-    getProfiles().then(setProfiles).catch(() => {});
-    setPhase("login");
-  }
-
-  // In voice mode, the interviewer speaks each new question exactly once.
+  // In voice mode, speak each new question exactly once.
   useEffect(() => {
     if (phase !== "interview" || !voiceMode || !current) return;
     if (spokenFor.current === current.questionId) return;
@@ -177,8 +126,7 @@ export default function Home() {
     });
   }, [phase, voiceMode, current]);
 
-  // Tick the session timer live while a session is in progress (interview turns
-  // and the brief "thinking" loads between them).
+  // Tick the session timer while a session is in progress.
   useEffect(() => {
     if (phase !== "interview" && phase !== "loading") return;
     if (sessionStartRef.current == null) return;
@@ -231,9 +179,7 @@ export default function Home() {
           else setError("Didn't catch that - try again, or switch to Browser mode or typing.");
         } catch (err) {
           setError(
-            "Server transcription failed (" +
-              String(err) +
-              "). Try Browser mode or type your answer."
+            "Server transcription failed (" + String(err) + "). Try Browser mode or type your answer."
           );
         } finally {
           setTranscribing(false);
@@ -249,11 +195,19 @@ export default function Home() {
   function beginIntro(e: React.FormEvent) {
     e.preventDefault();
     if (!role.trim()) return;
+    if (!user) {
+      openLogin();
+      return;
+    }
     setError("");
     setPhase("intro");
   }
 
   async function startInterview() {
+    if (!user) {
+      openLogin();
+      return;
+    }
     setError("");
     setPhase("loading");
     try {
@@ -261,7 +215,6 @@ export default function Home() {
         target_role: role.trim(),
         company: company.trim() || undefined,
         domain_focus: domain,
-        user_id: userId,
       });
       setSessionId(res.session_id);
       sessionStartRef.current = Date.now();
@@ -274,19 +227,17 @@ export default function Home() {
         isFollowUp: false,
         coding: res.coding,
       });
-      setMainQuestion(res.question); // first question is always a main question
+      setMainQuestion(res.question);
       setGroundingNote(res.grounding_note);
       setQNumber(1);
       setPhase("interview");
-      proctor.start(); // begin focus monitoring for the session
+      proctor.start();
     } catch (err) {
       setError(String(err));
       setPhase("intro");
     }
   }
 
-  // Shared submit path for both a real answer and a Skip. Keeps the response
-  // handling (follow-up vs next vs done) in one place.
   async function processAnswer(payload: {
     session_id: string;
     question_id: string;
@@ -309,7 +260,7 @@ export default function Home() {
       if (res.done) {
         proctor.stop();
         if (sessionStartRef.current != null) {
-          setElapsedMs(Date.now() - sessionStartRef.current); // freeze final time
+          setElapsedMs(Date.now() - sessionStartRef.current);
         }
         const report = await getDebrief(sessionId);
         setDebrief(report);
@@ -327,7 +278,7 @@ export default function Home() {
       setGroundingNote(res.grounding_note);
       if (!res.is_follow_up) {
         setQNumber((n) => n + 1);
-        setMainQuestion(res.question!); // new topic -> this becomes the context
+        setMainQuestion(res.question!);
       }
       setPhase("interview");
     } catch (err) {
@@ -347,7 +298,6 @@ export default function Home() {
     });
   }
 
-  // "Skip / Don't know": no answer needed; backend records it as 'avoided'.
   async function handleSkip() {
     if (!current) return;
     await processAnswer({
@@ -398,160 +348,110 @@ export default function Home() {
     }
   }
 
-  const inputCls =
-    "w-full rounded-lg bg-white border border-neutral-300 px-3 py-2 text-sm text-neutral-900 outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900";
-  const primaryBtn =
-    "rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed";
+  const sessionActive =
+    phase === "interview" || phase === "loading" || phase === "debrief";
 
   return (
-    <main className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col items-center px-4 py-12">
+    <main className="flex min-h-screen flex-col items-center px-4 py-12">
       <div className="w-full max-w-2xl">
-        <header className="mb-8 flex items-start justify-between gap-4">
+        <header className="mb-10 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">EchoCoach</h1>
-            <p className="text-sm text-neutral-500">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground">
+              EchoCoach
+            </h1>
+            <p className="mt-1.5 text-lg text-muted">
               The interviewer that remembers what you struggled with.
             </p>
           </div>
-          {sessionStartRef.current !== null &&
-            (phase === "interview" || phase === "loading" || phase === "debrief") && (
-              <div className="shrink-0 text-right" aria-label="Session timer">
-                <div className="font-mono text-lg tabular-nums text-neutral-900">
-                  ⏱ {fmtDuration(elapsedMs)}
-                </div>
-                <div className="text-[11px] uppercase tracking-wide text-neutral-500">
-                  {phase === "debrief" ? "total time" : "session time"}
-                </div>
+          {sessionStartRef.current !== null && sessionActive && (
+            <div className="shrink-0 text-right" aria-label="Session timer">
+              <div className="font-mono text-xl tabular-nums text-foreground">
+                ⏱ {fmtDuration(elapsedMs)}
               </div>
-            )}
+              <div className="text-[11px] uppercase tracking-wide text-muted">
+                {phase === "debrief" ? "total time" : "session time"}
+              </div>
+            </div>
+          )}
         </header>
 
         {error && (
-          <div className="mb-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mb-6 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300">
             {error}
           </div>
         )}
 
-        {phase === "login" && (
-          <form onSubmit={handleLogin} className="space-y-4">
+        {phase === "setup" && (
+          <form onSubmit={beginIntro} className="space-y-8">
             <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-2">
-                Who&apos;s interviewing?
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                {profiles.map((p) => (
-                  <button
-                    key={p.user_id}
-                    type="button"
-                    onClick={() => setSelectedProfile(p.user_id)}
-                    className={
-                      "rounded-lg border px-4 py-3 text-sm font-medium " +
-                      (selectedProfile === p.user_id
-                        ? "border-neutral-900 bg-neutral-900 text-white"
-                        : "border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-100")
-                    }
-                  >
-                    {p.display_name}
-                  </button>
-                ))}
-              </div>
+              <h2 className="text-2xl font-semibold text-foreground">
+                {user ? `Welcome back, ${user.display_name.split(" ")[0]}.` : "Start a mock interview"}
+              </h2>
+              <p className="mt-1 text-base text-muted">
+                Tell me the role you&apos;re targeting and I&apos;ll tailor the session.
+              </p>
             </div>
-            {selectedProfile && (
+
+            {!user && (
+              <div className="rounded-xl border border-primary/30 bg-primary-subtle px-4 py-3 text-sm text-foreground">
+                <button type="button" onClick={openLogin} className="font-semibold text-primary hover:underline">
+                  Log in or sign up
+                </button>{" "}
+                to start a session — your weakness graph is saved to your account.
+              </div>
+            )}
+
+            <div className="space-y-6">
               <div>
-                <label className="block text-sm font-medium text-neutral-700 mb-1">
-                  PIN
+                <label className={labelCls}>
+                  Target role <span className="text-primary">*</span>
                 </label>
                 <input
-                  type="password"
-                  inputMode="numeric"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  placeholder="••••"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="e.g. Senior Backend Engineer"
                   className={inputCls}
-                  autoFocus
                 />
               </div>
-            )}
-            {loginError && (
-              <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
-                {loginError}
+              <div>
+                <label className={labelCls}>
+                  Target company <span className="font-normal text-muted">(optional)</span>
+                </label>
+                <input
+                  value={company}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="e.g. Stripe"
+                  className={inputCls}
+                />
               </div>
-            )}
-            <button
-              type="submit"
-              className={primaryBtn}
-              disabled={!selectedProfile || !pin.trim() || loggingIn}
-            >
-              {loggingIn ? "Checking…" : "Log in"}
-            </button>
-          </form>
-        )}
+              <div>
+                <label className={labelCls}>Interview type</label>
+                <div className="inline-flex rounded-xl border border-border bg-surface p-1">
+                  {(
+                    [
+                      ["technical", "Technical"],
+                      ["behavioral", "Behavioral"],
+                      ["full", "Full"],
+                    ] as [SessionMode, string][]
+                  ).map(([d, lbl]) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setDomain(d)}
+                      className={
+                        "rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
+                        (domain === d
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted hover:text-foreground")
+                      }
+                    >
+                      {lbl}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
 
-        {phase === "setup" && (
-          <form onSubmit={beginIntro} className="space-y-4">
-            <div className="flex items-center justify-between text-sm text-neutral-600">
-              <span>
-                Signed in as <span className="font-medium text-neutral-900">{displayName}</span>
-              </span>
-              <button
-                type="button"
-                onClick={logout}
-                className="text-neutral-500 hover:text-neutral-900 underline"
-              >
-                not you?
-              </button>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">
-                Target role <span className="text-red-500">*</span>
-              </label>
-              <input
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-                placeholder="e.g. Senior Backend Engineer"
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">
-                Target company{" "}
-                <span className="text-neutral-400">(optional)</span>
-              </label>
-              <input
-                value={company}
-                onChange={(e) => setCompany(e.target.value)}
-                placeholder="e.g. Stripe"
-                className={inputCls}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-neutral-700 mb-1">
-                Interview type
-              </label>
-              <div className="inline-flex rounded-lg border border-neutral-300 p-0.5 bg-white">
-                {(
-                  [
-                    ["technical", "Technical"],
-                    ["behavioral", "Behavioral"],
-                    ["full", "Full (tech + behavioral)"],
-                  ] as [SessionMode, string][]
-                ).map(([d, label]) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => setDomain(d)}
-                    className={
-                      "rounded-md px-3 py-1.5 text-sm " +
-                      (domain === d
-                        ? "bg-neutral-900 text-white"
-                        : "text-neutral-600 hover:text-neutral-900")
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
             <button type="submit" className={primaryBtn} disabled={!role.trim()}>
               Continue
             </button>
@@ -559,92 +459,86 @@ export default function Home() {
         )}
 
         {phase === "intro" && (
-          <div className="space-y-5">
-            <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="h-9 w-9 rounded-full bg-neutral-900 text-white grid place-items-center text-sm font-semibold">
+          <div className="space-y-6">
+            <div className={card}>
+              <div className="mb-4 flex items-center gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
                   EC
                 </div>
                 <div>
-                  <p className="text-sm font-medium">Your EchoCoach interviewer</p>
-                  <p className="text-xs text-neutral-500">{role}</p>
+                  <p className="text-base font-semibold text-foreground">Your EchoCoach interviewer</p>
+                  <p className="text-sm text-muted">{role}</p>
                 </div>
               </div>
-              <div className="space-y-2 text-sm leading-relaxed text-neutral-700">
+              <div className="space-y-3 text-base leading-relaxed text-foreground/90">
                 <p>
-                  Hi - thanks for making the time today. I&apos;ll be your interviewer for
-                  this <span className="font-medium">{role}</span> session.
+                  Hi — thanks for making the time today. I&apos;ll be your interviewer for this{" "}
+                  <span className="font-medium text-foreground">{role}</span> session.
                 </p>
                 <p>
-                  Here&apos;s how this works: I&apos;ll ask you a few questions and dig in
-                  with follow-ups, just like a real interview. Think out loud and answer
-                  as you naturally would - I won&apos;t grade you as we go. At the end
-                  you&apos;ll get a short debrief on how it went.
+                  I&apos;ll ask a few questions and dig in with follow-ups, just like a real interview.
+                  Think out loud and answer as you naturally would — I won&apos;t grade you as we go.
+                  At the end you&apos;ll get a short debrief on how it went.
                 </p>
                 <p>Ready when you are.</p>
               </div>
             </div>
             <button onClick={startInterview} className={primaryBtn}>
-              I&apos;m ready - begin
+              I&apos;m ready — begin
             </button>
           </div>
         )}
 
         {phase === "loading" && (
-          <div className="flex items-center gap-3 text-neutral-500 text-sm">
+          <div className="flex items-center gap-3 text-base text-muted">
             <span className="inline-flex gap-1">
-              <span className="h-2 w-2 rounded-full bg-neutral-400 animate-bounce [animation-delay:-0.3s]" />
-              <span className="h-2 w-2 rounded-full bg-neutral-400 animate-bounce [animation-delay:-0.15s]" />
-              <span className="h-2 w-2 rounded-full bg-neutral-400 animate-bounce" />
+              <span className="h-2.5 w-2.5 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.3s]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.15s]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-primary/60 animate-bounce" />
             </span>
             The interviewer is thinking…
           </div>
         )}
 
         {phase === "interview" && current && (
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             {proctor.warning && (
-              <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
                 <span>
                   ⚠️ {proctor.warning}{" "}
-                  <span className="text-amber-600">
-                    (focus warnings: {proctor.violations})
-                  </span>
+                  <span className="opacity-70">(focus warnings: {proctor.violations})</span>
                 </span>
-                <button
-                  type="button"
-                  onClick={proctor.dismiss}
-                  className="text-amber-600 hover:text-amber-900"
-                >
+                <button type="button" onClick={proctor.dismiss} className="opacity-70 hover:opacity-100">
                   dismiss
                 </button>
               </div>
             )}
             {groundingNote && (
-              <p className="text-xs text-sky-700 bg-sky-50 border border-sky-200 rounded-lg px-3 py-1.5">
+              <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
                 🔎 {groundingNote}
               </p>
             )}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs text-neutral-500">
-                <span className="rounded-full bg-neutral-200 px-2 py-0.5">
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <span className="rounded-full bg-surface-2 px-2.5 py-1 font-medium text-muted">
                   Question {qNumber}
                 </span>
-                <span className="rounded-full bg-neutral-200 px-2 py-0.5">
+                <span className="rounded-full bg-surface-2 px-2.5 py-1 font-medium text-muted">
                   {current.topic.replace(/_/g, " ")}
                 </span>
                 {current.isFollowUp && (
-                  <span className="rounded-full bg-amber-100 text-amber-700 px-2 py-0.5">
+                  <span className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                     follow-up
                   </span>
                 )}
               </div>
               {voiceAvail && (
-                <div className="inline-flex rounded-lg border border-neutral-300 p-0.5 bg-white text-xs">
+                <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-xs">
                   {[
                     ["text", "Text"],
                     ["voice", "Voice"],
-                  ].map(([m, label]) => {
+                  ].map(([m, lbl]) => {
                     const active = (m === "voice") === voiceMode;
                     return (
                       <button
@@ -660,18 +554,15 @@ export default function Home() {
                             setSpeaking(false);
                             setListening(false);
                           } else {
-                            // let the effect speak the current question
                             spokenFor.current = "";
                           }
                         }}
                         className={
-                          "rounded-md px-2.5 py-1 " +
-                          (active
-                            ? "bg-neutral-900 text-white"
-                            : "text-neutral-600 hover:text-neutral-900")
+                          "rounded-md px-3 py-1.5 font-medium transition-colors " +
+                          (active ? "bg-primary text-primary-foreground" : "text-muted hover:text-foreground")
                         }
                       >
-                        {label}
+                        {lbl}
                       </button>
                     );
                   })}
@@ -681,29 +572,29 @@ export default function Home() {
 
             {voiceMode && (speechSupported() || whisperAvail) && (
               <div className="flex justify-end">
-                <div className="inline-flex rounded-lg border border-neutral-200 p-0.5 bg-white text-xs">
+                <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-xs">
                   {(
                     [
                       ["browser", "Browser", speechSupported()],
                       ["whisper", "Whisper", whisperAvail && recordingSupported()],
                     ] as [typeof sttEngine, string, boolean][]
-                  ).map(([eng, label, avail]) => (
+                  ).map(([eng, lbl, avail]) => (
                     <button
                       key={eng}
                       type="button"
                       disabled={!avail}
                       onClick={() => setSttEngine(eng)}
-                      title={avail ? undefined : `${label} isn't available in this browser`}
+                      title={avail ? undefined : `${lbl} isn't available in this browser`}
                       className={
-                        "rounded-md px-2.5 py-1 " +
+                        "rounded-md px-3 py-1.5 font-medium transition-colors " +
                         (sttEngine === eng
-                          ? "bg-neutral-900 text-white"
+                          ? "bg-primary text-primary-foreground"
                           : avail
-                            ? "text-neutral-600 hover:text-neutral-900"
-                            : "text-neutral-300 cursor-not-allowed")
+                            ? "text-muted hover:text-foreground"
+                            : "text-muted/40 cursor-not-allowed")
                       }
                     >
-                      {label}
+                      {lbl}
                     </button>
                   ))}
                 </div>
@@ -727,14 +618,14 @@ export default function Home() {
             )}
 
             {current.isFollowUp && mainQuestion && (
-              <div className="rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm text-neutral-600">
-                <span className="mb-0.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+              <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted/80">
                   Original question
                 </span>
                 {mainQuestion}
               </div>
             )}
-            <p className="text-lg leading-relaxed">{current.question}</p>
+            <p className="text-2xl leading-relaxed text-foreground">{current.question}</p>
 
             {current.coding ? (
               <CodeEditor value={answer} onChange={setAnswer} />
@@ -743,9 +634,7 @@ export default function Home() {
                 value={answer}
                 onChange={(e) => setAnswer(e.target.value)}
                 rows={voiceMode ? 5 : 8}
-                placeholder={
-                  voiceMode ? "Your spoken answer appears here…" : "Type your answer…"
-                }
+                placeholder={voiceMode ? "Your spoken answer appears here…" : "Type your answer…"}
                 className={inputCls}
               />
             )}
@@ -754,19 +643,15 @@ export default function Home() {
               <Whiteboard onChange={setImageB64} />
             )}
 
-            <div className="flex items-center gap-3">
-              <button
-                type="submit"
-                className={primaryBtn}
-                disabled={!answer.trim() && !imageB64}
-              >
+            <div className="flex flex-wrap items-center gap-3">
+              <button type="submit" className={primaryBtn} disabled={!answer.trim() && !imageB64}>
                 Submit answer
               </button>
               <button
                 type="button"
                 onClick={handleSkip}
                 title="Skip this question — recorded as not attempted"
-                className="rounded-lg px-4 py-2 text-sm font-medium border border-neutral-300 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+                className="rounded-xl border border-border px-5 py-2.5 text-base font-medium text-muted transition hover:bg-surface-2 hover:text-foreground"
               >
                 Skip Question
               </button>
@@ -775,10 +660,10 @@ export default function Home() {
                   type="button"
                   onClick={() => setShowBoard((s) => !s)}
                   className={
-                    "rounded-lg px-4 py-2 text-sm font-medium border " +
+                    "rounded-xl border px-5 py-2.5 text-base font-medium transition " +
                     (showBoard
-                      ? "border-sky-300 bg-sky-50 text-sky-700"
-                      : "border-neutral-300 text-neutral-700 hover:bg-neutral-100")
+                      ? "border-primary/40 bg-primary-subtle text-primary"
+                      : "border-border text-foreground hover:bg-surface-2")
                   }
                 >
                   🖊 {showBoard ? "Hide whiteboard" : "Whiteboard"}
@@ -790,28 +675,13 @@ export default function Home() {
                   onClick={toggleMic}
                   disabled={transcribing}
                   className={
-                    "rounded-lg px-4 py-2 text-sm font-medium border disabled:opacity-50 " +
+                    "rounded-xl border px-5 py-2.5 text-base font-medium transition disabled:opacity-50 " +
                     (listening
-                      ? "border-red-300 bg-red-50 text-red-700"
-                      : "border-neutral-300 text-neutral-700 hover:bg-neutral-100")
+                      ? "border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300"
+                      : "border-border text-foreground hover:bg-surface-2")
                   }
                 >
                   {transcribing ? "Transcribing…" : listening ? "◼ Stop" : "🎤 Speak"}
-                </button>
-              )}
-              {voiceMode && current && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    speak(current.question, {
-                      onStart: () => setSpeaking(true),
-                      onBoundary: () => setBump((b) => b + 1),
-                      onEnd: () => setSpeaking(false),
-                    })
-                  }
-                  className="text-xs text-neutral-500 hover:text-neutral-800"
-                >
-                  replay question
                 </button>
               )}
             </div>
@@ -819,28 +689,25 @@ export default function Home() {
         )}
 
         {phase === "debrief" && (
-          <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Session debrief</h2>
+          <div className="space-y-5">
+            <h2 className="text-2xl font-semibold text-foreground">Session debrief</h2>
 
             {proctor.violations > 0 && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+              <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
                 Integrity note: you left the interview window{" "}
-                <span className="font-medium">{proctor.violations}</span> time(s)
-                during this session.
+                <span className="font-medium">{proctor.violations}</span> time(s) during this session.
               </div>
             )}
 
-            <div className="relative rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-              {/* Toggle sits beside the section heading; it swaps the whole
-                  card between the summary and the full Q&A transcript. */}
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-lg font-semibold">
+            <div className={card}>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold text-foreground">
                   {showQA ? "Questions & Answers" : "Summary"}
                 </h3>
                 <button
                   type="button"
                   onClick={toggleQA}
-                  className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground transition hover:bg-surface-2"
                 >
                   {showQA ? "← Back to summary" : "Questions & Answers"}
                 </button>
@@ -848,46 +715,40 @@ export default function Home() {
 
               {showQA ? (
                 <div className="space-y-3">
-                  {qaLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+                  {qaLoading && <p className="text-sm text-muted">Loading…</p>}
                   {!qaLoading && qa && qa.length === 0 && (
-                    <p className="text-sm text-neutral-500">No questions were recorded.</p>
+                    <p className="text-sm text-muted">No questions were recorded.</p>
                   )}
                   {!qaLoading &&
                     qa?.map((item, i) => (
-                      <div
-                        key={i}
-                        className="border-b border-neutral-100 pb-3 last:border-0 last:pb-0"
-                      >
-                        <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-neutral-400">
+                      <div key={i} className="border-b border-border pb-3 last:border-0 last:pb-0">
+                        <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted">
                           <span>{item.topic.replace(/_/g, " ")}</span>
                           {item.is_follow_up && (
-                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-700 normal-case">
+                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 normal-case text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
                               follow-up
                             </span>
                           )}
                         </div>
-                        <p className="text-sm font-medium text-neutral-900">{item.question}</p>
+                        <p className="text-sm font-medium text-foreground">{item.question}</p>
                         {item.skipped ? (
-                          <p className="mt-1 text-sm font-medium text-amber-700">⤼ Skipped</p>
+                          <p className="mt-1 text-sm font-medium text-amber-600 dark:text-amber-400">⤼ Skipped</p>
                         ) : (
-                          <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-600">
-                            {item.answer || <span className="italic text-neutral-400">(no answer)</span>}
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-muted">
+                            {item.answer || <span className="italic text-muted/60">(no answer)</span>}
                           </p>
                         )}
                       </div>
                     ))}
                 </div>
               ) : (
-                // Strip the debrief's own leading "## Summary" — the card supplies it.
-                <article className="prose prose-sm prose-neutral max-w-none">
+                <article className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground">
                   <ReactMarkdown>{debrief.replace(/^\s*##\s*Summary\s*\n/i, "")}</ReactMarkdown>
                 </article>
               )}
             </div>
-            <button
-              onClick={reset}
-              className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100"
-            >
+
+            <button onClick={reset} className={ghostBtn}>
               New session
             </button>
           </div>
