@@ -8,13 +8,13 @@
    Semantic names (surface/foreground/muted/border/primary/…) so components
    never hardcode colors and light↔dark is a single source of truth. */
 :root {
-  --background: #f8fafc;        /* slate-50  */
-  --surface: #ffffff;
-  --surface-2: #f1f5f9;         /* slate-100 subtle fills */
-  --foreground: #0f172a;        /* slate-900 */
-  --muted: #64748b;             /* slate-500 */
-  --border: #e2e8f0;            /* slate-200 */
-  --primary: #4f46e5;           /* indigo-600 */
+  --background: #faf7f0;        /* soft warm off-white */
+  --surface: #fffdf7;           /* warm beige surface (not stark white) */
+  --surface-2: #f2ecdf;         /* deeper beige for subtle fills/chips */
+  --foreground: #1c1917;        /* warm near-black (stone-900) */
+  --muted: #78716c;             /* warm grey (stone-500) */
+  --border: #e8e0d1;            /* warm beige border */
+  --primary: #4f46e5;           /* indigo-600 (accent, kept) */
   --primary-hover: #4338ca;     /* indigo-700 */
   --primary-foreground: #ffffff;
   --primary-subtle: #eef2ff;    /* indigo-50 */
