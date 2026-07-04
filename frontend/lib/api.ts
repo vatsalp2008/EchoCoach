@@ -142,6 +142,20 @@ export async function getSessionQA(sessionId: string): Promise<QAItem[]> {
   return data.qa;
 }
 
+export interface SessionSummary {
+  id: string;
+  started_at: string;
+  ended_at: string | null;
+  domain_focus: SessionMode;
+  company: string | null;
+  n_questions: number;
+}
+
+export async function getSessions(): Promise<SessionSummary[]> {
+  const data = await getJson<{ sessions: SessionSummary[] }>("/api/sessions");
+  return data.sessions;
+}
+
 // ── speech-to-text ─────────────────────────────────────────────────────────
 export interface TranscribeResponse {
   transcript: string;

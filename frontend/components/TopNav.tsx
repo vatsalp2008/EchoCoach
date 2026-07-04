@@ -14,12 +14,16 @@ export default function TopNav() {
         <Link href="/" className="text-base font-bold tracking-tight text-foreground">
           EchoCoach
         </Link>
-        <Link href="/" className="text-muted transition-colors hover:text-foreground">
-          Interview
-        </Link>
-        <Link href="/graph" className="text-muted transition-colors hover:text-foreground">
-          Weakness graph
-        </Link>
+        {!loading && user && (
+          <>
+            <Link href="/graph" className="text-muted transition-colors hover:text-foreground">
+              Weakness graph
+            </Link>
+            <Link href="/history" className="text-muted transition-colors hover:text-foreground">
+              History
+            </Link>
+          </>
+        )}
 
         <div className="ml-auto flex items-center gap-3">
           <ThemeToggle />

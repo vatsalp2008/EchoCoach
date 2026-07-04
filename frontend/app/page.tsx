@@ -1,13 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
 import {
   AnswerResponse,
   Domain,
   getDebrief,
-  getSessionQA,
-  QAItem,
   SessionMode,
   startSession,
   sttStatus,
@@ -29,6 +26,7 @@ import {
 import Avatar from "@/components/Avatar";
 import CodeEditor from "@/components/CodeEditor";
 import Whiteboard from "@/components/Whiteboard";
+import DebriefView from "@/components/DebriefView";
 import { useProctor } from "@/lib/useProctor";
 import { useAuth } from "@/components/AuthProvider";
 
@@ -75,11 +73,6 @@ export default function Home() {
   const [qNumber, setQNumber] = useState(0);
   const [debrief, setDebrief] = useState("");
   const [error, setError] = useState("");
-
-  // Debrief "Questions & Answers" view (fetched on demand).
-  const [qa, setQa] = useState<QAItem[] | null>(null);
-  const [showQA, setShowQA] = useState(false);
-  const [qaLoading, setQaLoading] = useState(false);
 
   // Live session timer (client-only).
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -329,23 +322,6 @@ export default function Home() {
     setGroundingNote(null);
     sessionStartRef.current = null;
     setElapsedMs(0);
-    setQa(null);
-    setShowQA(false);
-  }
-
-  async function toggleQA() {
-    const next = !showQA;
-    setShowQA(next);
-    if (next && qa === null) {
-      setQaLoading(true);
-      try {
-        setQa(await getSessionQA(sessionId));
-      } catch (err) {
-        setError(String(err));
-      } finally {
-        setQaLoading(false);
-      }
-    }
   }
 
   const sessionActive =
@@ -354,12 +330,12 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center px-4 py-12">
       <div className="w-full max-w-2xl">
-        <header className="mb-10 flex items-start justify-between gap-4">
+        <header className="mb-12 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-bold tracking-tight text-foreground">
+            <h1 className="text-5xl font-bold tracking-tight text-foreground">
               EchoCoach
             </h1>
-            <p className="mt-1.5 text-lg text-muted">
+            <p className="mt-3 text-xl text-muted">
               The interviewer that remembers what you struggled with.
             </p>
           </div>
@@ -382,12 +358,12 @@ export default function Home() {
         )}
 
         {phase === "setup" && (
-          <form onSubmit={beginIntro} className="space-y-8">
+          <div className="space-y-8">
             <div>
-              <h2 className="text-2xl font-semibold text-foreground">
+              <h2 className="text-3xl font-bold tracking-tight text-foreground">
                 {user ? `Welcome back, ${user.display_name.split(" ")[0]}.` : "Start a mock interview"}
               </h2>
-              <p className="mt-1 text-base text-muted">
+              <p className="mt-2 text-lg text-muted">
                 Tell me the role you&apos;re targeting and I&apos;ll tailor the session.
               </p>
             </div>
@@ -401,7 +377,10 @@ export default function Home() {
               </div>
             )}
 
-            <div className="space-y-6">
+            <form
+              onSubmit={beginIntro}
+              className="space-y-7 rounded-2xl border border-border bg-surface p-8 shadow-sm"
+            >
               <div>
                 <label className={labelCls}>
                   Target role <span className="text-primary">*</span>
@@ -450,12 +429,12 @@ export default function Home() {
                   ))}
                 </div>
               </div>
-            </div>
 
-            <button type="submit" className={primaryBtn} disabled={!role.trim()}>
-              Continue
-            </button>
-          </form>
+              <button type="submit" className={`${primaryBtn} w-full`} disabled={!role.trim()}>
+                Continue
+              </button>
+            </form>
+          </div>
         )}
 
         {phase === "intro" && (
@@ -699,54 +678,7 @@ export default function Home() {
               </div>
             )}
 
-            <div className={card}>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <h3 className="text-lg font-semibold text-foreground">
-                  {showQA ? "Questions & Answers" : "Summary"}
-                </h3>
-                <button
-                  type="button"
-                  onClick={toggleQA}
-                  className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground transition hover:bg-surface-2"
-                >
-                  {showQA ? "← Back to summary" : "Questions & Answers"}
-                </button>
-              </div>
-
-              {showQA ? (
-                <div className="space-y-3">
-                  {qaLoading && <p className="text-sm text-muted">Loading…</p>}
-                  {!qaLoading && qa && qa.length === 0 && (
-                    <p className="text-sm text-muted">No questions were recorded.</p>
-                  )}
-                  {!qaLoading &&
-                    qa?.map((item, i) => (
-                      <div key={i} className="border-b border-border pb-3 last:border-0 last:pb-0">
-                        <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-muted">
-                          <span>{item.topic.replace(/_/g, " ")}</span>
-                          {item.is_follow_up && (
-                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 normal-case text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-                              follow-up
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-sm font-medium text-foreground">{item.question}</p>
-                        {item.skipped ? (
-                          <p className="mt-1 text-sm font-medium text-amber-600 dark:text-amber-400">⤼ Skipped</p>
-                        ) : (
-                          <p className="mt-1 whitespace-pre-wrap text-sm text-muted">
-                            {item.answer || <span className="italic text-muted/60">(no answer)</span>}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              ) : (
-                <article className="prose prose-sm max-w-none dark:prose-invert prose-headings:text-foreground prose-strong:text-foreground">
-                  <ReactMarkdown>{debrief.replace(/^\s*##\s*Summary\s*\n/i, "")}</ReactMarkdown>
-                </article>
-              )}
-            </div>
+            <DebriefView debrief={debrief} sessionId={sessionId} />
 
             <button onClick={reset} className={ghostBtn}>
               New session
