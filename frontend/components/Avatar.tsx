@@ -10,10 +10,13 @@ export default function Avatar({
   speaking,
   listening,
   bump,
+  onReplay,
 }: {
   speaking: boolean;
   listening: boolean;
   bump: number;
+  // When provided, clicking the orb replays the current question aloud (TTS).
+  onReplay?: () => void;
 }) {
   const [scale, setScale] = useState(1);
   const target = useRef(1);
@@ -43,21 +46,42 @@ export default function Avatar({
 
   const ring = listening ? "#dc2626" : speaking ? "#0ea5e9" : "#cbd5e1";
   const label = listening ? "Listening…" : speaking ? "Speaking…" : "Ready";
+  const clickable = typeof onReplay === "function";
 
   return (
     <div className="flex flex-col items-center gap-2 py-2">
       <div
-        className="grid h-24 w-24 place-items-center rounded-full transition-colors"
+        className={
+          "grid h-24 w-24 place-items-center rounded-full transition-colors" +
+          (clickable ? " cursor-pointer" : "")
+        }
         style={{
           background:
             "radial-gradient(circle at 35% 30%, #38bdf8, #0284c7 70%, #075985)",
           transform: `scale(${scale})`,
           boxShadow: `0 0 0 4px ${ring}33, 0 8px 30px ${ring}55`,
         }}
+        onClick={onReplay}
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        aria-label={clickable ? "Replay the question aloud" : undefined}
+        title={clickable ? "Click to hear the question again" : undefined}
+        onKeyDown={
+          clickable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onReplay!();
+                }
+              }
+            : undefined
+        }
       >
         <span className="text-white text-lg font-semibold tracking-wide">EC</span>
       </div>
-      <span className="text-xs text-neutral-500">{label}</span>
+      <span className="text-xs text-neutral-500">
+        {clickable && !speaking && !listening ? "Tap to replay" : label}
+      </span>
     </div>
   );
 }

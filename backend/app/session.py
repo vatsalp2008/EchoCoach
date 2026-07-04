@@ -141,6 +141,21 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
     current = state["current"]
     user_id = state["user_id"]
 
+    # "Skip / Don't know": record an 'avoided' signal (so the weakness graph still
+    # tracks it and future sessions route back), log the skip, and just move on —
+    # no grading call, no follow-up, no replacement question (spec 4.2 'avoided').
+    if req.skipped:
+        await _record_skip(
+            req.session_id, user_id, current["topic"], current["domain"]
+        )
+        db.record_qa(
+            req.session_id, topic=current["topic"],
+            is_follow_up=current["is_follow_up"], question=current["question"],
+            answer="", skipped=True, created_at=_now(),
+        )
+        await _maybe_forget(current["topic"], user_id)
+        return await _advance(req.session_id, state)
+
     # 1-3. Grade silently, write to the topic dataset, mirror locally.
     sig = await grade_and_remember(
         session_id=req.session_id,
@@ -150,6 +165,13 @@ async def submit_answer(req: AnswerRequest) -> AnswerResponse:
         question=current["question"],
         transcript=req.transcript,
         image_b64=req.image_b64,
+    )
+    # Log what the candidate actually saw + answered (incl. whiteboard-only turns).
+    db.record_qa(
+        req.session_id, topic=current["topic"],
+        is_follow_up=current["is_follow_up"], question=current["question"],
+        answer=req.transcript or ("[whiteboard sketch submitted]" if req.image_b64 else ""),
+        skipped=False, created_at=_now(),
     )
 
     # 6. Follow-up logic (spec 5.3), only for the topic just answered.
@@ -351,6 +373,26 @@ async def _force_struggled(
         signal="struggled", grader_confidence=0.9, delivery="hedgy",
         evidence="Two follow-up clarifications did not resolve the gap.",
         reasoning="Unresolved after the follow-up cap — recorded as a real struggle signal.",
+        follow_up_needed=False, follow_up_focus=None,
+    )
+    db.record_signal(sig.model_dump(), user_id)
+    memory.schedule_remember(_memory_text(sig), _topic_dataset(topic, user_id))
+
+
+async def _record_skip(
+    session_id: str, user_id: str, topic: str, domain: Domain
+) -> None:
+    """Record a 'Skip / Don't know' as an 'avoided' signal (spec 4.2) — mirrored
+    to SQLite and written to the weakness graph via remember(), same as any other
+    signal, so future sessions route back to it. Evidence marks it as an explicit
+    skip so the debrief shows it as skipped, distinct from an attempted struggle."""
+    from .schemas import GradingSignal as GS
+
+    sig = GS(
+        session_id=session_id, timestamp=_now(), topic=topic, domain=domain,
+        signal="avoided", grader_confidence=1.0, delivery="vague",
+        evidence="Candidate chose 'Skip / Don't know' — did not attempt this question.",
+        reasoning="Skipped by the candidate; recorded as avoided so it stays tracked and routable.",
         follow_up_needed=False, follow_up_focus=None,
     )
     db.record_signal(sig.model_dump(), user_id)

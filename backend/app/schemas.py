@@ -100,6 +100,7 @@ class AnswerRequest(BaseModel):
     question_id: str
     transcript: str = ""
     image_b64: Optional[str] = None  # optional whiteboard sketch (base64 PNG)
+    skipped: bool = False  # "Skip / Don't know": record 'avoided', don't grade an answer
 
 
 class AnswerResponse(BaseModel):

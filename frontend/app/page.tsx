@@ -7,8 +7,10 @@ import {
   Domain,
   getDebrief,
   getProfiles,
+  getSessionQA,
   login,
   Profile,
+  QAItem,
   SessionMode,
   startSession,
   sttStatus,
@@ -33,6 +35,14 @@ import Whiteboard from "@/components/Whiteboard";
 import { useProctor } from "@/lib/useProctor";
 
 type Phase = "login" | "setup" | "intro" | "interview" | "loading" | "debrief";
+
+// mm:ss for the live session timer.
+function fmtDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 interface CurrentQ {
   questionId: string;
@@ -60,10 +70,22 @@ export default function Home() {
   const [domain, setDomain] = useState<SessionMode>("technical");
   const [sessionId, setSessionId] = useState("");
   const [current, setCurrent] = useState<CurrentQ | null>(null);
+  // The last main (non-follow-up) question, kept so it can be shown as context
+  // while the interviewer probes it with follow-ups.
+  const [mainQuestion, setMainQuestion] = useState("");
   const [answer, setAnswer] = useState("");
   const [qNumber, setQNumber] = useState(0);
   const [debrief, setDebrief] = useState("");
   const [error, setError] = useState("");
+
+  // Debrief "Questions & Answers" view (fetched on demand).
+  const [qa, setQa] = useState<QAItem[] | null>(null);
+  const [showQA, setShowQA] = useState(false);
+  const [qaLoading, setQaLoading] = useState(false);
+
+  // Live session timer (client-only; no backend involvement).
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const sessionStartRef = useRef<number | null>(null);
 
   // Voice layer (additive; text stays the fallback).
   const [voiceMode, setVoiceMode] = useState(false);
@@ -155,6 +177,19 @@ export default function Home() {
     });
   }, [phase, voiceMode, current]);
 
+  // Tick the session timer live while a session is in progress (interview turns
+  // and the brief "thinking" loads between them).
+  useEffect(() => {
+    if (phase !== "interview" && phase !== "loading") return;
+    if (sessionStartRef.current == null) return;
+    const id = setInterval(() => {
+      if (sessionStartRef.current != null) {
+        setElapsedMs(Date.now() - sessionStartRef.current);
+      }
+    }, 500);
+    return () => clearInterval(id);
+  }, [phase]);
+
   function toggleMic() {
     if (sttEngine === "whisper") {
       toggleWhisperRecording();
@@ -229,6 +264,8 @@ export default function Home() {
         user_id: userId,
       });
       setSessionId(res.session_id);
+      sessionStartRef.current = Date.now();
+      setElapsedMs(0);
       setCurrent({
         questionId: res.question_id,
         topic: res.topic,
@@ -237,6 +274,7 @@ export default function Home() {
         isFollowUp: false,
         coding: res.coding,
       });
+      setMainQuestion(res.question); // first question is always a main question
       setGroundingNote(res.grounding_note);
       setQNumber(1);
       setPhase("interview");
@@ -247,9 +285,15 @@ export default function Home() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!current || (!answer.trim() && !imageB64)) return;
+  // Shared submit path for both a real answer and a Skip. Keeps the response
+  // handling (follow-up vs next vs done) in one place.
+  async function processAnswer(payload: {
+    session_id: string;
+    question_id: string;
+    transcript: string;
+    image_b64?: string;
+    skipped?: boolean;
+  }) {
     stopListening();
     stopRecording();
     setListening(false);
@@ -258,17 +302,15 @@ export default function Home() {
     setError("");
     setPhase("loading");
     try {
-      const res: AnswerResponse = await submitAnswer({
-        session_id: sessionId,
-        question_id: current.questionId,
-        transcript: answer.trim(),
-        image_b64: imageB64 || undefined,
-      });
+      const res: AnswerResponse = await submitAnswer(payload);
       setAnswer("");
       setImageB64("");
       setShowBoard(false);
       if (res.done) {
         proctor.stop();
+        if (sessionStartRef.current != null) {
+          setElapsedMs(Date.now() - sessionStartRef.current); // freeze final time
+        }
         const report = await getDebrief(sessionId);
         setDebrief(report);
         setPhase("debrief");
@@ -283,12 +325,37 @@ export default function Home() {
         coding: res.coding,
       });
       setGroundingNote(res.grounding_note);
-      if (!res.is_follow_up) setQNumber((n) => n + 1);
+      if (!res.is_follow_up) {
+        setQNumber((n) => n + 1);
+        setMainQuestion(res.question!); // new topic -> this becomes the context
+      }
       setPhase("interview");
     } catch (err) {
       setError(String(err));
       setPhase("interview");
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!current || (!answer.trim() && !imageB64)) return;
+    await processAnswer({
+      session_id: sessionId,
+      question_id: current.questionId,
+      transcript: answer.trim(),
+      image_b64: imageB64 || undefined,
+    });
+  }
+
+  // "Skip / Don't know": no answer needed; backend records it as 'avoided'.
+  async function handleSkip() {
+    if (!current) return;
+    await processAnswer({
+      session_id: sessionId,
+      question_id: current.questionId,
+      transcript: "",
+      skipped: true,
+    });
   }
 
   function reset() {
@@ -306,9 +373,29 @@ export default function Home() {
     setRole("");
     setCompany("");
     setCurrent(null);
+    setMainQuestion("");
     setDebrief("");
     setQNumber(0);
     setGroundingNote(null);
+    sessionStartRef.current = null;
+    setElapsedMs(0);
+    setQa(null);
+    setShowQA(false);
+  }
+
+  async function toggleQA() {
+    const next = !showQA;
+    setShowQA(next);
+    if (next && qa === null) {
+      setQaLoading(true);
+      try {
+        setQa(await getSessionQA(sessionId));
+      } catch (err) {
+        setError(String(err));
+      } finally {
+        setQaLoading(false);
+      }
+    }
   }
 
   const inputCls =
@@ -319,11 +406,24 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-neutral-50 text-neutral-900 flex flex-col items-center px-4 py-12">
       <div className="w-full max-w-2xl">
-        <header className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">EchoCoach</h1>
-          <p className="text-sm text-neutral-500">
-            The interviewer that remembers what you struggled with.
-          </p>
+        <header className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">EchoCoach</h1>
+            <p className="text-sm text-neutral-500">
+              The interviewer that remembers what you struggled with.
+            </p>
+          </div>
+          {sessionStartRef.current !== null &&
+            (phase === "interview" || phase === "loading" || phase === "debrief") && (
+              <div className="shrink-0 text-right" aria-label="Session timer">
+                <div className="font-mono text-lg tabular-nums text-neutral-900">
+                  ⏱ {fmtDuration(elapsedMs)}
+                </div>
+                <div className="text-[11px] uppercase tracking-wide text-neutral-500">
+                  {phase === "debrief" ? "total time" : "session time"}
+                </div>
+              </div>
+            )}
         </header>
 
         {error && (
@@ -611,9 +711,29 @@ export default function Home() {
             )}
 
             {voiceMode && (
-              <Avatar speaking={speaking} listening={listening} bump={bump} />
+              <Avatar
+                speaking={speaking}
+                listening={listening}
+                bump={bump}
+                onReplay={() =>
+                  current &&
+                  speak(current.question, {
+                    onStart: () => setSpeaking(true),
+                    onBoundary: () => setBump((b) => b + 1),
+                    onEnd: () => setSpeaking(false),
+                  })
+                }
+              />
             )}
 
+            {current.isFollowUp && mainQuestion && (
+              <div className="rounded-lg border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm text-neutral-600">
+                <span className="mb-0.5 block text-[11px] font-medium uppercase tracking-wide text-neutral-400">
+                  Original question
+                </span>
+                {mainQuestion}
+              </div>
+            )}
             <p className="text-lg leading-relaxed">{current.question}</p>
 
             {current.coding ? (
@@ -641,6 +761,14 @@ export default function Home() {
                 disabled={!answer.trim() && !imageB64}
               >
                 Submit answer
+              </button>
+              <button
+                type="button"
+                onClick={handleSkip}
+                title="Skip this question — recorded as not attempted"
+                className="rounded-lg px-4 py-2 text-sm font-medium border border-neutral-300 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+              >
+                Skip / Don&apos;t know
               </button>
               {current.domain === "technical" && !current.coding && (
                 <button
@@ -692,7 +820,50 @@ export default function Home() {
 
         {phase === "debrief" && (
           <div className="space-y-4">
-            <h2 className="text-xl font-semibold">Session debrief</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-xl font-semibold">Session debrief</h2>
+              <button
+                type="button"
+                onClick={toggleQA}
+                className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
+              >
+                {showQA ? "Hide Q&A" : "Questions & Answers"}
+              </button>
+            </div>
+
+            {showQA && (
+              <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm space-y-3">
+                {qaLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+                {!qaLoading && qa && qa.length === 0 && (
+                  <p className="text-sm text-neutral-500">No questions were recorded.</p>
+                )}
+                {!qaLoading &&
+                  qa?.map((item, i) => (
+                    <div
+                      key={i}
+                      className="border-b border-neutral-100 pb-3 last:border-0 last:pb-0"
+                    >
+                      <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-neutral-400">
+                        <span>{item.topic.replace(/_/g, " ")}</span>
+                        {item.is_follow_up && (
+                          <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-700 normal-case">
+                            follow-up
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm font-medium text-neutral-900">{item.question}</p>
+                      {item.skipped ? (
+                        <p className="mt-1 text-sm font-medium text-amber-700">⤼ Skipped</p>
+                      ) : (
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-600">
+                          {item.answer || <span className="italic text-neutral-400">(no answer)</span>}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
+
             {proctor.violations > 0 && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
                 Integrity note: you left the interview window{" "}

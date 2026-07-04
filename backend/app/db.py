@@ -53,6 +53,16 @@ CREATE TABLE IF NOT EXISTS grading_signals (
     payload    TEXT NOT NULL,       -- full GradingSignal JSON
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS qa_log (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id   TEXT NOT NULL,
+    topic        TEXT NOT NULL,
+    is_follow_up INTEGER NOT NULL DEFAULT 0,
+    question     TEXT NOT NULL,     -- exactly what the candidate saw (incl. grounding rewrite)
+    answer       TEXT NOT NULL DEFAULT '',
+    skipped      INTEGER NOT NULL DEFAULT 0,
+    created_at   TEXT NOT NULL
+);
 """
 
 
@@ -168,6 +178,40 @@ def mastered_counts(topic: str, user_id: str = "default_user") -> tuple[int, int
             (user_id, topic),
         ).fetchone()
         return row["n"], row["s"]
+
+
+# ── Q&A log (transcript of every question asked + what was answered) ─────────
+def record_qa(
+    session_id: str, *, topic: str, is_follow_up: bool, question: str,
+    answer: str, skipped: bool, created_at: str,
+) -> None:
+    with connect() as conn:
+        conn.execute(
+            "INSERT INTO qa_log(session_id, topic, is_follow_up, question, answer, skipped, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (session_id, topic, int(is_follow_up), question, answer, int(skipped), created_at),
+        )
+
+
+def qa_for_session(session_id: str) -> list[dict]:
+    """Every question asked this session (incl. follow-ups), in order, with what
+    the candidate answered. Skipped turns carry skipped=True and an empty answer."""
+    with connect() as conn:
+        rows = conn.execute(
+            "SELECT topic, is_follow_up, question, answer, skipped FROM qa_log "
+            "WHERE session_id=? ORDER BY id",
+            (session_id,),
+        ).fetchall()
+    return [
+        {
+            "topic": r["topic"],
+            "is_follow_up": bool(r["is_follow_up"]),
+            "question": r["question"],
+            "answer": r["answer"],
+            "skipped": bool(r["skipped"]),
+        }
+        for r in rows
+    ]
 
 
 def topics_touched(session_id: str) -> list[str]:

@@ -87,11 +87,16 @@ def _template_debrief(signals: list[dict], questions: dict[str, str]) -> str:
     def nice(t: str) -> str:
         return t.replace("_", " ")
 
+    # 'avoided' means the topic wasn't attempted (incl. an explicit Skip) — show
+    # it distinctly from 'struggled' (attempted but weak).
+    def label(signal: str) -> str:
+        return "skipped / not attempted" if signal == "avoided" else signal
+
     lines = ["## Summary",
              "Quick summary from your graded answers (detailed synthesis skipped — LLM quota reached).",
              "", "## By topic"]
     for topic, s in latest.items():
-        lines.append(f"- **{nice(topic)}** — {s['signal']} ({s['delivery']} delivery)")
+        lines.append(f"- **{nice(topic)}** — {label(s['signal'])} ({s['delivery']} delivery)")
     lines += ["", "## Focus next"]
     lines += [f"- {nice(t)}" for t in weak] or ["- Keep reinforcing what you covered; no weak topics flagged."]
     return "\n".join(lines)

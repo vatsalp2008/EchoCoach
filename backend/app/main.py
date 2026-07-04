@@ -81,6 +81,14 @@ async def get_debrief(session_id: str) -> dict:
     return {"session_id": session_id, "debrief": report}
 
 
+@app.get("/api/session/{session_id}/qa")
+async def get_qa(session_id: str) -> dict:
+    """Full transcript for the debrief's Questions & Answers view: every question
+    asked (incl. follow-ups) with what the candidate answered; skipped turns are
+    flagged so the UI shows them as skipped rather than blank."""
+    return {"session_id": session_id, "qa": db.qa_for_session(session_id)}
+
+
 @app.get("/api/stt/status")
 async def stt_status() -> dict:
     """Lets the frontend feature-detect server-side Whisper, same idea as the

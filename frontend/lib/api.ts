@@ -79,8 +79,24 @@ export function submitAnswer(input: {
   question_id: string;
   transcript: string;
   image_b64?: string;
+  skipped?: boolean;
 }) {
   return post<AnswerResponse>("/api/answer", input);
+}
+
+export interface QAItem {
+  topic: string;
+  is_follow_up: boolean;
+  question: string;
+  answer: string;
+  skipped: boolean;
+}
+
+export async function getSessionQA(sessionId: string): Promise<QAItem[]> {
+  const res = await fetch(`${API_BASE}/api/session/${sessionId}/qa`);
+  if (!res.ok) throw new Error(`qa failed: ${res.status}`);
+  const data = (await res.json()) as { qa: QAItem[] };
+  return data.qa;
 }
 
 export interface GraphNode {
