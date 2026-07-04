@@ -27,6 +27,7 @@ import Avatar from "@/components/Avatar";
 import CodeEditor from "@/components/CodeEditor";
 import Whiteboard from "@/components/Whiteboard";
 import DebriefView from "@/components/DebriefView";
+import Landing from "@/components/Landing";
 import { useProctor } from "@/lib/useProctor";
 import { useAuth } from "@/components/AuthProvider";
 
@@ -60,7 +61,7 @@ const ghostBtn =
 const card = "rounded-2xl border border-border bg-surface p-6 shadow-sm";
 
 export default function Home() {
-  const { user, openLogin } = useAuth();
+  const { user, loading, openLogin } = useAuth();
 
   const [phase, setPhase] = useState<Phase>("setup");
   const [role, setRole] = useState("");
@@ -326,6 +327,19 @@ export default function Home() {
 
   const sessionActive =
     phase === "interview" || phase === "loading" || phase === "debrief";
+
+  // Auth gate: logged-out visitors get the marketing landing page; logged-in
+  // users land straight on the setup app (no landing flash on refresh).
+  if (loading) {
+    return (
+      <main className="flex min-h-[calc(100vh-3.25rem)] items-center justify-center text-muted">
+        Loading…
+      </main>
+    );
+  }
+  if (!user) {
+    return <Landing />;
+  }
 
   return (
     <main className="flex min-h-screen flex-col items-center px-4 py-12">
