@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS grading_signals (
     payload    TEXT NOT NULL,       -- full GradingSignal JSON
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    email         TEXT NOT NULL UNIQUE COLLATE NOCASE,  -- primary identity
+    display_name  TEXT NOT NULL,
+    password_hash TEXT,           -- NULLABLE: a Google-only account has none
+    google_sub    TEXT UNIQUE,    -- reserved for future 'Sign in with Google'
+    created_at    TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS qa_log (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id   TEXT NOT NULL,
@@ -86,6 +94,49 @@ def init_db() -> None:
                 "VALUES (?,?,?,?,?)",
                 (q["id"], q["domain"], q["topic"], q["question"], q["difficulty"]),
             )
+
+
+# ── users (email+password; google_sub reserved for later) ────────────────────
+def create_user(
+    *, email: str, display_name: str, password_hash: str | None,
+    created_at: str, google_sub: str | None = None,
+) -> int:
+    """Insert a user and return its id. password_hash may be None (Google-only
+    account). Raises sqlite3.IntegrityError on a duplicate email (caller -> 409)."""
+    with connect() as conn:
+        cur = conn.execute(
+            "INSERT INTO users(email, display_name, password_hash, google_sub, created_at) "
+            "VALUES (?,?,?,?,?)",
+            (email, display_name, password_hash, google_sub, created_at),
+        )
+        return int(cur.lastrowid)
+
+
+def get_user_by_email(email: str) -> sqlite3.Row | None:
+    with connect() as conn:
+        return conn.execute(
+            "SELECT * FROM users WHERE email = ? COLLATE NOCASE", (email,)
+        ).fetchone()
+
+
+def get_user_by_id(user_pk: int) -> sqlite3.Row | None:
+    with connect() as conn:
+        return conn.execute("SELECT * FROM users WHERE id = ?", (user_pk,)).fetchone()
+
+
+def get_user_by_google_sub(google_sub: str) -> sqlite3.Row | None:
+    with connect() as conn:
+        return conn.execute(
+            "SELECT * FROM users WHERE google_sub = ?", (google_sub,)
+        ).fetchone()
+
+
+def set_google_sub(user_pk: int, google_sub: str) -> None:
+    """Link a Google identity to an existing (e.g. email+password) account."""
+    with connect() as conn:
+        conn.execute(
+            "UPDATE users SET google_sub = ? WHERE id = ?", (google_sub, user_pk)
+        )
 
 
 # ── sessions ────────────────────────────────────────────────────────────────

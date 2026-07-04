@@ -27,6 +27,19 @@ APP_LLM_MODEL = os.getenv("APP_LLM_MODEL", "gemini-2.5-flash")
 # App bookkeeping DB (NOT the memory graph — that lives inside Cognee).
 SQLITE_PATH = BACKEND_ROOT / "echocoach.db"
 
+# ── Auth (email+password now; the model leaves room for Google later) ────────
+# Session is a stateless JWT delivered in an HttpOnly cookie. Set a strong
+# SESSION_SECRET in .env for any real deployment — the default is dev-only and
+# rotating it invalidates all existing sessions.
+SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-change-me")
+SESSION_TTL_DAYS = int(os.getenv("SESSION_TTL_DAYS", "14"))
+SESSION_COOKIE = "ec_session"
+# Google Sign-In (ID-token flow): the client id is the token audience we verify.
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+# Secure cookies require HTTPS, so default off for local dev; set COOKIE_SECURE=1
+# (and serve over HTTPS) in production. SameSite=lax works for same-site dev.
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "0") == "1"
+
 # ── Server-side speech-to-text (Whisper) ─────────────────────────────────────
 # Additive to the browser's Web Speech API (frontend/lib/speech.ts) — never a
 # replacement. Two interchangeable engines, auto-selected in stt.py:

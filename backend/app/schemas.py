@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 Signal = Literal["mastered", "partial", "struggled", "avoided"]
 Delivery = Literal["concise", "rambling", "vague", "hedgy", "direct"]
@@ -68,13 +68,20 @@ class TranscribeResponse(BaseModel):
     transcript: str
 
 
+class SignupRequest(BaseModel):
+    display_name: str = Field(min_length=1, max_length=80)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=200)
+
+
 class LoginRequest(BaseModel):
-    user_id: str
-    pin: str
+    email: EmailStr
+    password: str
 
 
-class LoginResponse(BaseModel):
-    user_id: str
+class UserOut(BaseModel):
+    id: str
+    email: str
     display_name: str
 
 
