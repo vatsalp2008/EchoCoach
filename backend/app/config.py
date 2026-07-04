@@ -27,12 +27,21 @@ APP_LLM_MODEL = os.getenv("APP_LLM_MODEL", "gemini-2.5-flash")
 # App bookkeeping DB (NOT the memory graph — that lives inside Cognee).
 SQLITE_PATH = BACKEND_ROOT / "echocoach.db"
 
-# ── Server-side speech-to-text (Whisper via MLX) ─────────────────────────────
+# ── Server-side speech-to-text (Whisper) ─────────────────────────────────────
 # Additive to the browser's Web Speech API (frontend/lib/speech.ts) — never a
-# replacement. Swappable via env with no code change (e.g. drop to
-# "mlx-community/whisper-small.en" if turbo-q4 is too slow/large on a given machine).
+# replacement. Two interchangeable engines, auto-selected in stt.py:
+#   • mlx-whisper   — Apple Silicon only, fastest there (the team's Macs).
+#   • faster-whisper — cross-platform (Windows/Linux/Intel Mac), CPU or CUDA.
+# So the feature works regardless of device; MLX is just the fast path when present.
 ENABLE_WHISPER_STT = os.getenv("ENABLE_WHISPER_STT", "1") != "0"
+# Model for the MLX engine (Apple Silicon). Swappable via env, e.g. drop to
+# "mlx-community/whisper-small.en" if turbo-q4 is too slow/large on a given Mac.
 WHISPER_MODEL_REPO = os.getenv("WHISPER_MODEL_REPO", "mlx-community/whisper-large-v3-turbo-q4")
+# Model + runtime for the faster-whisper engine (everywhere else). "small" is a
+# good accuracy/speed balance on CPU (~460MB); int8 keeps CPU inference quick.
+WHISPER_MODEL_FW = os.getenv("WHISPER_MODEL_FW", "small")
+WHISPER_FW_DEVICE = os.getenv("WHISPER_FW_DEVICE", "cpu")      # "cpu" | "cuda"
+WHISPER_FW_COMPUTE = os.getenv("WHISPER_FW_COMPUTE", "int8")   # e.g. int8 | float16
 
 # Keep Cognee's stores inside the repo (gitignored), not in site-packages.
 COGNEE_DATA_DIR = BACKEND_ROOT / ".cognee_data"

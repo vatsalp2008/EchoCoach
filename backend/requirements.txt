@@ -8,5 +8,10 @@ python-dotenv
 httpx
 pytest
 fastembed
-mlx
-mlx-whisper
+# ── Local Whisper STT (server-side, opt-in; see app/stt.py) ──────────────────
+# Cross-platform engine — works on Windows/Linux/Intel Mac (CPU or CUDA).
+faster-whisper
+# Apple-Silicon-only fast path. Markers keep `pip install -r requirements.txt`
+# from failing on non-Apple machines (mlx has no wheels there).
+mlx ; sys_platform == "darwin" and platform_machine == "arm64"
+mlx-whisper ; sys_platform == "darwin" and platform_machine == "arm64"
