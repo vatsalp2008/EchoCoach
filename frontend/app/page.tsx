@@ -768,7 +768,7 @@ export default function Home() {
                 title="Skip this question — recorded as not attempted"
                 className="rounded-lg px-4 py-2 text-sm font-medium border border-neutral-300 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
               >
-                Skip / Don&apos;t know
+                Skip Question
               </button>
               {current.domain === "technical" && !current.coding && (
                 <button
@@ -820,49 +820,7 @@ export default function Home() {
 
         {phase === "debrief" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">Session debrief</h2>
-              <button
-                type="button"
-                onClick={toggleQA}
-                className="rounded-lg border border-neutral-300 px-3 py-1.5 text-sm font-medium text-neutral-700 hover:bg-neutral-100"
-              >
-                {showQA ? "Hide Q&A" : "Questions & Answers"}
-              </button>
-            </div>
-
-            {showQA && (
-              <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm space-y-3">
-                {qaLoading && <p className="text-sm text-neutral-500">Loading…</p>}
-                {!qaLoading && qa && qa.length === 0 && (
-                  <p className="text-sm text-neutral-500">No questions were recorded.</p>
-                )}
-                {!qaLoading &&
-                  qa?.map((item, i) => (
-                    <div
-                      key={i}
-                      className="border-b border-neutral-100 pb-3 last:border-0 last:pb-0"
-                    >
-                      <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-neutral-400">
-                        <span>{item.topic.replace(/_/g, " ")}</span>
-                        {item.is_follow_up && (
-                          <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-700 normal-case">
-                            follow-up
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm font-medium text-neutral-900">{item.question}</p>
-                      {item.skipped ? (
-                        <p className="mt-1 text-sm font-medium text-amber-700">⤼ Skipped</p>
-                      ) : (
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-600">
-                          {item.answer || <span className="italic text-neutral-400">(no answer)</span>}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-              </div>
-            )}
+            <h2 className="text-xl font-semibold">Session debrief</h2>
 
             {proctor.violations > 0 && (
               <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -871,9 +829,61 @@ export default function Home() {
                 during this session.
               </div>
             )}
-            <article className="prose prose-sm prose-neutral max-w-none rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-              <ReactMarkdown>{debrief}</ReactMarkdown>
-            </article>
+
+            <div className="relative rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+              {/* Toggle sits beside the section heading; it swaps the whole
+                  card between the summary and the full Q&A transcript. */}
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold">
+                  {showQA ? "Questions & Answers" : "Summary"}
+                </h3>
+                <button
+                  type="button"
+                  onClick={toggleQA}
+                  className="rounded-lg border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-100"
+                >
+                  {showQA ? "← Back to summary" : "Questions & Answers"}
+                </button>
+              </div>
+
+              {showQA ? (
+                <div className="space-y-3">
+                  {qaLoading && <p className="text-sm text-neutral-500">Loading…</p>}
+                  {!qaLoading && qa && qa.length === 0 && (
+                    <p className="text-sm text-neutral-500">No questions were recorded.</p>
+                  )}
+                  {!qaLoading &&
+                    qa?.map((item, i) => (
+                      <div
+                        key={i}
+                        className="border-b border-neutral-100 pb-3 last:border-0 last:pb-0"
+                      >
+                        <div className="mb-1 flex items-center gap-2 text-[11px] uppercase tracking-wide text-neutral-400">
+                          <span>{item.topic.replace(/_/g, " ")}</span>
+                          {item.is_follow_up && (
+                            <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-amber-700 normal-case">
+                              follow-up
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm font-medium text-neutral-900">{item.question}</p>
+                        {item.skipped ? (
+                          <p className="mt-1 text-sm font-medium text-amber-700">⤼ Skipped</p>
+                        ) : (
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-600">
+                            {item.answer || <span className="italic text-neutral-400">(no answer)</span>}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              ) : (
+                // Strip the debrief's own leading "## Summary" — the card supplies it.
+                <article className="prose prose-sm prose-neutral max-w-none">
+                  <ReactMarkdown>{debrief.replace(/^\s*##\s*Summary\s*\n/i, "")}</ReactMarkdown>
+                </article>
+              )}
+            </div>
             <button
               onClick={reset}
               className="rounded-lg border border-neutral-300 px-4 py-2 text-sm hover:bg-neutral-100"
