@@ -77,7 +77,7 @@ export default function Whiteboard({
         <button
           type="button"
           onClick={clear}
-          className="text-xs text-neutral-600 hover:text-neutral-900"
+          className="rounded text-xs text-neutral-600 hover:text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           clear
         </button>

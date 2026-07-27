@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import { GlareButton } from "@/components/motion";
 import {
   AnswerResponse,
   Domain,
@@ -30,6 +32,7 @@ import DebriefView from "@/components/DebriefView";
 import Landing from "@/components/Landing";
 import { useProctor } from "@/lib/useProctor";
 import { useAuth } from "@/components/AuthProvider";
+import { Mic, PenLine, Search, Square, TriangleAlert } from "lucide-react";
 
 type Phase = "setup" | "intro" | "interview" | "loading" | "debrief";
 
@@ -55,9 +58,9 @@ const inputCls =
   "w-full rounded-lg border border-border bg-surface px-3.5 py-2.5 text-base text-foreground outline-none transition focus:border-primary focus:ring-2 focus:ring-ring/40 placeholder:text-muted/60";
 const labelCls = "block text-[15px] font-medium text-foreground mb-1.5";
 const primaryBtn =
-  "rounded-xl bg-primary px-5 py-2.5 text-base font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed";
+  "rounded-xl bg-primary px-5 py-2.5 text-base font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 const ghostBtn =
-  "rounded-xl border border-border px-5 py-2.5 text-base font-medium text-foreground transition hover:bg-surface-2 disabled:opacity-50";
+  "rounded-xl border border-border px-5 py-2.5 text-base font-medium text-foreground transition hover:bg-surface-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 const card = "rounded-2xl border border-border bg-surface p-6 shadow-sm";
 
 export default function Home() {
@@ -371,8 +374,16 @@ export default function Home() {
           </div>
         )}
 
+        <AnimatePresence mode="wait">
         {phase === "setup" && (
-          <div className="space-y-8">
+          <motion.div
+            key="setup"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-8"
+          >
             <div>
               <h2 className="text-3xl font-bold tracking-tight text-foreground">
                 {user ? `Welcome back, ${user.display_name.split(" ")[0]}.` : "Start a mock interview"}
@@ -384,7 +395,11 @@ export default function Home() {
 
             {!user && (
               <div className="rounded-xl border border-primary/30 bg-primary-subtle px-4 py-3 text-sm text-foreground">
-                <button type="button" onClick={openLogin} className="font-semibold text-primary hover:underline">
+                <button
+                  type="button"
+                  onClick={openLogin}
+                  className="rounded font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
                   Log in or sign up
                 </button>{" "}
                 to start a session — your weakness graph is saved to your account.
@@ -432,7 +447,7 @@ export default function Home() {
                       type="button"
                       onClick={() => setDomain(d)}
                       className={
-                        "rounded-lg px-4 py-2 text-sm font-medium transition-colors " +
+                        "rounded-lg px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
                         (domain === d
                           ? "bg-primary text-primary-foreground"
                           : "text-muted hover:text-foreground")
@@ -444,15 +459,22 @@ export default function Home() {
                 </div>
               </div>
 
-              <button type="submit" className={`${primaryBtn} w-full`} disabled={!role.trim()}>
+              <GlareButton type="submit" className={`${primaryBtn} w-full`} disabled={!role.trim()}>
                 Continue
-              </button>
+              </GlareButton>
             </form>
-          </div>
+          </motion.div>
         )}
 
         {phase === "intro" && (
-          <div className="space-y-6">
+          <motion.div
+            key="intro"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-6"
+          >
             <div className={card}>
               <div className="mb-4 flex items-center gap-3">
                 <div className="grid h-11 w-11 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground">
@@ -476,39 +498,62 @@ export default function Home() {
                 <p>Ready when you are.</p>
               </div>
             </div>
-            <button onClick={startInterview} className={primaryBtn}>
+            <GlareButton onClick={startInterview} className={primaryBtn}>
               I&apos;m ready — begin
-            </button>
-          </div>
+            </GlareButton>
+          </motion.div>
         )}
 
         {phase === "loading" && (
-          <div className="flex items-center gap-3 text-base text-muted">
+          <motion.div
+            key="loading"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center gap-3 text-base text-muted"
+          >
             <span className="inline-flex gap-1">
               <span className="h-2.5 w-2.5 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.3s]" />
               <span className="h-2.5 w-2.5 rounded-full bg-primary/60 animate-bounce [animation-delay:-0.15s]" />
               <span className="h-2.5 w-2.5 rounded-full bg-primary/60 animate-bounce" />
             </span>
             The interviewer is thinking…
-          </div>
+          </motion.div>
         )}
 
         {phase === "interview" && current && (
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <motion.form
+            key="interview"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25 }}
+            onSubmit={handleSubmit}
+            className="space-y-5"
+          >
             {proctor.warning && (
               <div className="flex items-start justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
-                <span>
-                  ⚠️ {proctor.warning}{" "}
-                  <span className="opacity-70">(focus warnings: {proctor.violations})</span>
+                <span className="flex items-start gap-2">
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span>
+                    {proctor.warning}{" "}
+                    <span className="opacity-70">(focus warnings: {proctor.violations})</span>
+                  </span>
                 </span>
-                <button type="button" onClick={proctor.dismiss} className="opacity-70 hover:opacity-100">
+                <button
+                  type="button"
+                  onClick={proctor.dismiss}
+                  className="rounded-md opacity-70 transition hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
                   dismiss
                 </button>
               </div>
             )}
             {groundingNote && (
-              <p className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
-                🔎 {groundingNote}
+              <p className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-sm text-sky-700 dark:border-sky-500/30 dark:bg-sky-500/10 dark:text-sky-300">
+                <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                {groundingNote}
               </p>
             )}
 
@@ -551,7 +596,7 @@ export default function Home() {
                           }
                         }}
                         className={
-                          "rounded-md px-3 py-1.5 font-medium transition-colors " +
+                          "rounded-md px-3 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
                           (active ? "bg-primary text-primary-foreground" : "text-muted hover:text-foreground")
                         }
                       >
@@ -579,7 +624,7 @@ export default function Home() {
                       onClick={() => setSttEngine(eng)}
                       title={avail ? undefined : `${lbl} isn't available in this browser`}
                       className={
-                        "rounded-md px-3 py-1.5 font-medium transition-colors " +
+                        "rounded-md px-3 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
                         (sttEngine === eng
                           ? "bg-primary text-primary-foreground"
                           : avail
@@ -610,15 +655,23 @@ export default function Home() {
               />
             )}
 
-            {current.isFollowUp && mainQuestion && (
-              <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
-                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted/80">
-                  Original question
-                </span>
-                {mainQuestion}
-              </div>
-            )}
-            <p className="text-2xl leading-relaxed text-foreground">{current.question}</p>
+            <motion.div
+              key={current.questionId}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
+              className="space-y-4"
+            >
+              {current.isFollowUp && mainQuestion && (
+                <div className="rounded-xl border border-border bg-surface-2 px-4 py-3 text-sm text-muted">
+                  <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted/80">
+                    Original question
+                  </span>
+                  {mainQuestion}
+                </div>
+              )}
+              <p className="text-2xl leading-relaxed text-foreground">{current.question}</p>
+            </motion.div>
 
             {current.coding ? (
               <CodeEditor value={answer} onChange={setAnswer} />
@@ -637,14 +690,14 @@ export default function Home() {
             )}
 
             <div className="flex flex-wrap items-center gap-3">
-              <button type="submit" className={primaryBtn} disabled={!answer.trim() && !imageB64}>
+              <GlareButton type="submit" className={primaryBtn} disabled={!answer.trim() && !imageB64}>
                 Submit answer
-              </button>
+              </GlareButton>
               <button
                 type="button"
                 onClick={handleSkip}
                 title="Skip this question — recorded as not attempted"
-                className="rounded-xl border border-border px-5 py-2.5 text-base font-medium text-muted transition hover:bg-surface-2 hover:text-foreground"
+                className="rounded-xl border border-border px-5 py-2.5 text-base font-medium text-muted transition hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
                 Skip Question
               </button>
@@ -653,13 +706,14 @@ export default function Home() {
                   type="button"
                   onClick={() => setShowBoard((s) => !s)}
                   className={
-                    "rounded-xl border px-5 py-2.5 text-base font-medium transition " +
+                    "flex items-center gap-2 rounded-xl border px-5 py-2.5 text-base font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background " +
                     (showBoard
                       ? "border-primary/40 bg-primary-subtle text-primary"
                       : "border-border text-foreground hover:bg-surface-2")
                   }
                 >
-                  🖊 {showBoard ? "Hide whiteboard" : "Whiteboard"}
+                  <PenLine className="h-4 w-4" aria-hidden="true" />
+                  {showBoard ? "Hide whiteboard" : "Whiteboard"}
                 </button>
               )}
               {voiceMode && !current.coding && (
@@ -668,21 +722,38 @@ export default function Home() {
                   onClick={toggleMic}
                   disabled={transcribing}
                   className={
-                    "rounded-xl border px-5 py-2.5 text-base font-medium transition disabled:opacity-50 " +
+                    "flex items-center gap-2 rounded-xl border px-5 py-2.5 text-base font-medium transition disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background " +
                     (listening
                       ? "border-red-300 bg-red-50 text-red-700 dark:border-red-500/40 dark:bg-red-500/10 dark:text-red-300"
                       : "border-border text-foreground hover:bg-surface-2")
                   }
                 >
-                  {transcribing ? "Transcribing…" : listening ? "◼ Stop" : "🎤 Speak"}
+                  {transcribing ? (
+                    "Transcribing…"
+                  ) : listening ? (
+                    <>
+                      <Square className="h-4 w-4 fill-current" aria-hidden="true" /> Stop
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="h-4 w-4" aria-hidden="true" /> Speak
+                    </>
+                  )}
                 </button>
               )}
             </div>
-          </form>
+          </motion.form>
         )}
 
         {phase === "debrief" && (
-          <div className="space-y-5">
+          <motion.div
+            key="debrief"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.25 }}
+            className="space-y-5"
+          >
             <h2 className="text-2xl font-semibold text-foreground">Session debrief</h2>
 
             {proctor.violations > 0 && (
@@ -697,8 +768,9 @@ export default function Home() {
             <button onClick={reset} className={ghostBtn}>
               New session
             </button>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </div>
     </main>
   );

@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
+import { motion } from "framer-motion";
 import { googleSignin, login as apiLogin, signup as apiSignup } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import { GlareButton } from "@/components/motion";
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 const inputCls =
@@ -107,7 +109,12 @@ export default function LoginPage() {
 
   return (
     <main className="flex min-h-[calc(100vh-3.25rem)] flex-col items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="w-full max-w-md"
+      >
         <div className="mb-6 text-center">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">
             {isSignup ? "Create your account" : "Welcome back"}
@@ -172,13 +179,13 @@ export default function LoginPage() {
               </p>
             )}
 
-            <button
+            <GlareButton
               type="submit"
               disabled={busy}
-              className="w-full rounded-xl bg-primary px-5 py-3 text-base font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50"
+              className="w-full rounded-xl bg-primary px-5 py-3 text-base font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
               {busy ? "Please wait…" : isSignup ? "Create account" : "Log in"}
-            </button>
+            </GlareButton>
           </form>
 
           <p className="mt-5 text-center text-sm text-muted">
@@ -189,7 +196,7 @@ export default function LoginPage() {
                 setError("");
                 setMode(isSignup ? "login" : "signup");
               }}
-              className="font-semibold text-primary hover:underline"
+              className="rounded font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               {isSignup ? "Log in" : "Sign up"}
             </button>
@@ -201,7 +208,7 @@ export default function LoginPage() {
             ← Back to home
           </Link>
         </p>
-      </div>
+      </motion.div>
     </main>
   );
 }

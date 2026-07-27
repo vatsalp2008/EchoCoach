@@ -19,6 +19,7 @@ hackathon (WeMakeDevs) — **open-source / self-hosted track** (MacBook prize).
 Full spec: [`echocoach_build_spec.md`](echocoach_build_spec.md). Build plan lives in
 the spec's 5 phases; we execute them in order, each demoable before the next.
 
+
 ---
 
 ## ✅ Done — Phase 0 (environment + Cognee gate)

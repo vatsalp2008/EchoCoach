@@ -35,7 +35,7 @@ export default function ThemeToggle() {
             aria-label={label}
             aria-pressed={active}
             className={
-              "grid h-7 w-7 place-items-center rounded-md transition-colors " +
+              "grid h-7 w-7 place-items-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
               (active
                 ? "bg-primary text-primary-foreground"
                 : "text-muted hover:text-foreground")

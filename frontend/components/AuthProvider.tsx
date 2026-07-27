@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { useTheme } from "next-themes";
+import { AnimatePresence, motion } from "framer-motion";
 import { X } from "lucide-react";
 import {
   getMe,
@@ -18,6 +19,7 @@ import {
   signup as apiSignup,
   User,
 } from "@/lib/api";
+import { GlareButton } from "./motion";
 
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
@@ -79,17 +81,20 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   return (
     <Ctx.Provider value={value}>
       {children}
-      {mode && (
-        <AuthModal
-          mode={mode}
-          switchMode={setMode}
-          onClose={() => setMode(null)}
-          onSuccess={(u) => {
-            setUser(u);
-            setMode(null);
-          }}
-        />
-      )}
+      <AnimatePresence>
+        {mode && (
+          <AuthModal
+            key="auth-modal"
+            mode={mode}
+            switchMode={setMode}
+            onClose={() => setMode(null)}
+            onSuccess={(u) => {
+              setUser(u);
+              setMode(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
     </Ctx.Provider>
   );
 }
@@ -191,11 +196,19 @@ function AuthModal({
   }
 
   return (
-    <div
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
-      <div
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 12 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 12 }}
+        transition={{ duration: 0.25, ease: "easeOut" }}
         className="w-full max-w-md rounded-2xl border border-border bg-surface p-7 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
@@ -214,7 +227,7 @@ function AuthModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-lg p-1 text-muted hover:bg-surface-2 hover:text-foreground"
+            className="rounded-lg p-1 text-muted hover:bg-surface-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X size={20} />
           </button>
@@ -272,13 +285,13 @@ function AuthModal({
             </p>
           )}
 
-          <button
+          <GlareButton
             type="submit"
             disabled={busy}
-            className="w-full rounded-xl bg-primary px-5 py-3 text-base font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50"
+            className="w-full rounded-xl bg-primary px-5 py-3 text-base font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             {busy ? "Please wait…" : isSignup ? "Create account" : "Log in"}
-          </button>
+          </GlareButton>
         </form>
 
         <p className="mt-5 text-center text-sm text-muted">
@@ -289,12 +302,12 @@ function AuthModal({
               setError("");
               switchMode(isSignup ? "login" : "signup");
             }}
-            className="font-semibold text-primary hover:underline"
+            className="rounded font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {isSignup ? "Log in" : "Sign up"}
           </button>
         </p>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }

@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { getDebrief, getSessions, SessionSummary } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import DebriefView from "@/components/DebriefView";
+import { fadeUp, Reveal } from "@/components/motion";
 
 function fmtWhen(iso: string): string {
   const d = new Date(iso);
@@ -73,7 +75,10 @@ export default function HistoryPage() {
         {!loading && !user && (
           <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
             <p className="text-base text-muted">
-              <button onClick={openLogin} className="font-semibold text-primary hover:underline">
+              <button
+                onClick={openLogin}
+                className="rounded font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 Log in
               </button>{" "}
               to see your past sessions.
@@ -83,10 +88,16 @@ export default function HistoryPage() {
 
         {/* Detail view */}
         {user && selected && (
-          <div className="space-y-5">
+          <motion.div
+            key={selected.id}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+            className="space-y-5"
+          >
             <button
               onClick={() => setSelected(null)}
-              className="text-sm font-medium text-primary hover:underline"
+              className="rounded text-sm font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               ← All sessions
             </button>
@@ -105,12 +116,12 @@ export default function HistoryPage() {
             ) : (
               <DebriefView debrief={debrief} sessionId={selected.id} />
             )}
-          </div>
+          </motion.div>
         )}
 
         {/* List view */}
         {user && !selected && (
-          <div className="space-y-3">
+          <Reveal className="space-y-3">
             {sessions === null && <p className="text-sm text-muted">Loading…</p>}
             {sessions?.length === 0 && (
               <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
@@ -124,10 +135,13 @@ export default function HistoryPage() {
               </div>
             )}
             {sessions?.map((s) => (
-              <button
+              <motion.button
                 key={s.id}
+                variants={fadeUp}
+                whileHover={{ y: -2 }}
+                transition={{ duration: 0.2 }}
                 onClick={() => open(s)}
-                className="flex w-full items-center justify-between gap-4 rounded-xl border border-border bg-surface px-5 py-4 text-left shadow-sm transition hover:border-primary/40 hover:bg-surface-2"
+                className="flex w-full items-center justify-between gap-4 rounded-xl border border-border bg-surface px-5 py-4 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div>
                   <p className="text-base font-semibold text-foreground">{fmtWhen(s.started_at)}</p>
@@ -139,9 +153,9 @@ export default function HistoryPage() {
                 <span className="shrink-0 rounded-full bg-surface-2 px-2.5 py-1 text-xs font-medium text-muted">
                   {s.n_questions} Q
                 </span>
-              </button>
+              </motion.button>
             ))}
-          </div>
+          </Reveal>
         )}
       </div>
     </main>
