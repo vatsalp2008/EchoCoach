@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import { motion } from "framer-motion";
+import { Eye, EyeOff } from "lucide-react";
 import { googleSignin, login as apiLogin, signup as apiSignup } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { GlareButton } from "@/components/motion";
@@ -25,6 +26,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const isSignup = mode === "signup";
 
@@ -164,13 +166,24 @@ export default function LoginPage() {
             </div>
             <div>
               <label className={labelCls}>Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={isSignup ? "At least 8 characters" : "••••••••"}
-                className={inputCls}
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={isSignup ? "At least 8 characters" : "••••••••"}
+                  className={inputCls + " pr-11"}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((s) => !s)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                  className="absolute inset-y-0 right-0 grid w-11 place-items-center text-muted transition-colors hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
 
             {error && (

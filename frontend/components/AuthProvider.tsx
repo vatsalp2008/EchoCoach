@@ -10,7 +10,7 @@ import {
 } from "react";
 import { useTheme } from "next-themes";
 import { AnimatePresence, motion } from "framer-motion";
-import { X } from "lucide-react";
+import { Eye, EyeOff, X } from "lucide-react";
 import {
   getMe,
   googleSignin,
@@ -119,6 +119,7 @@ function AuthModal({
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const isSignup = mode === "signup";
   const { resolvedTheme } = useTheme();
   const googleBtnRef = useRef<HTMLDivElement>(null);
@@ -270,13 +271,24 @@ function AuthModal({
           </div>
           <div>
             <label className={labelCls}>Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={isSignup ? "At least 8 characters" : "••••••••"}
-              className={inputCls}
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={isSignup ? "At least 8 characters" : "••••••••"}
+                className={inputCls + " pr-11"}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                title={showPassword ? "Hide password" : "Show password"}
+                className="absolute inset-y-0 right-0 grid w-11 place-items-center text-muted transition-colors hover:text-foreground"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
           </div>
 
           {error && (
