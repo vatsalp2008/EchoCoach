@@ -3,6 +3,8 @@
 // (spec 8.3). Everything degrades to no-ops when unsupported, so the text loop
 // underneath is never affected.
 
+import { synthesizeSpeech, ttsStatus } from "./api";
+
 export interface ListenHandlers {
   onInterim?: (text: string) => void; // live partial transcript
   onFinal?: (text: string) => void; // full transcript when listening stops
@@ -67,7 +69,17 @@ export function stopListening(): void {
   }
 }
 
+/** Speak with the server's neural voice when it's available, otherwise the
+ * browser's built-in one. Same handlers either way. */
 export function speak(text: string, h: SpeakHandlers = {}): void {
+  cancelSpeak();
+  const token = _speakToken;
+  speakServer(text, h, token).then((ok) => {
+    if (!ok && token === _speakToken) speakBrowser(text, h);
+  });
+}
+
+function speakBrowser(text: string, h: SpeakHandlers): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
     h.onEnd?.();
     return;
@@ -83,8 +95,116 @@ export function speak(text: string, h: SpeakHandlers = {}): void {
 }
 
 export function cancelSpeak(): void {
+  _speakToken++; // drops any server audio still being fetched/decoded
+  try {
+    _source?.stop();
+  } catch {
+    /* already stopped */
+  }
+  _source = null;
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
+  }
+}
+
+// ── Server-side TTS (local Kokoro voice) - preferred over the browser voice ──
+// The browser's SpeechSynthesis sounds robotic, so the backend renders each
+// question with a neural voice and we play it through Web Audio - which also
+// gives us the real signal to pulse the avatar with. Any failure (engine not
+// installed, network, autoplay blocked) falls back to speakBrowser above.
+
+let _ctx: AudioContext | null = null;
+let _source: AudioBufferSourceNode | null = null;
+let _speakToken = 0;
+let _serverTts: Promise<boolean> | null = null;
+let _lastAudio: { text: string; buffer: AudioBuffer } | null = null; // makes replay instant
+
+function audioCtx(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  const AC =
+    window.AudioContext ||
+    (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AC) return null;
+  _ctx ??= new AC();
+  return _ctx;
+}
+
+// Browsers (Safari especially) only let an AudioContext start from a user
+// gesture, but questions are spoken after an async fetch. Resuming it on any
+// click/keypress keeps it unlocked for later playback.
+if (typeof window !== "undefined") {
+  const unlock = () => {
+    if (_ctx?.state !== "running") audioCtx()?.resume();
+  };
+  window.addEventListener("pointerdown", unlock, true);
+  window.addEventListener("keydown", unlock, true);
+}
+
+function serverTtsAvailable(): Promise<boolean> {
+  _serverTts ??= ttsStatus()
+    .then((s) => s.available)
+    .catch(() => false);
+  return _serverTts;
+}
+
+async function speakServer(text: string, h: SpeakHandlers, token: number): Promise<boolean> {
+  const ctx = audioCtx();
+  if (!ctx || !(await serverTtsAvailable())) return false;
+  try {
+    let buffer = _lastAudio?.text === text ? _lastAudio.buffer : null;
+    if (!buffer) {
+      const wav = await synthesizeSpeech(text);
+      if (token !== _speakToken) return true; // superseded - stay quiet
+      buffer = await ctx.decodeAudioData(wav);
+      _lastAudio = { text, buffer };
+    }
+    if (token !== _speakToken) return true;
+    // resume() never settles while autoplay is blocked, so don't wait forever.
+    if (ctx.state !== "running") {
+      await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 300))]);
+    }
+    if (token !== _speakToken) return true;
+    if (ctx.state !== "running") return false; // still blocked - use the browser voice
+
+    const src = ctx.createBufferSource();
+    src.buffer = buffer;
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024; // ~21ms window - about one syllable
+    src.connect(analyser);
+    analyser.connect(ctx.destination);
+
+    // Loudness onsets stand in for the browser engine's word boundaries. The
+    // thresholds (with hysteresis) were tuned on Kokoro output to land near
+    // the speaking rate, ~3 pulses per second.
+    const samples = new Uint8Array(analyser.fftSize);
+    let loud = false;
+    let raf = 0;
+    const tick = () => {
+      analyser.getByteTimeDomainData(samples);
+      let sum = 0;
+      for (const v of samples) sum += ((v - 128) / 128) ** 2;
+      const rms = Math.sqrt(sum / samples.length);
+      if (!loud && rms > 0.04) {
+        loud = true;
+        h.onBoundary?.();
+      } else if (loud && rms < 0.02) {
+        loud = false;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+
+    src.onended = () => {
+      cancelAnimationFrame(raf);
+      if (_source === src) _source = null;
+      h.onEnd?.();
+    };
+    _source = src;
+    h.onStart?.();
+    src.start();
+    raf = requestAnimationFrame(tick);
+    return true;
+  } catch {
+    return false;
   }
 }
 

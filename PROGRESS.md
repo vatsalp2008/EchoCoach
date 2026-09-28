@@ -97,6 +97,19 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
     numpy ≥2.5 later, re-check for a conflict. First run of `mlx_whisper.transcribe()`
     also downloads the model (~500-600MB) from the HF Hub — do this once, well
     ahead of any demo, not during it.
+13. **Kokoro TTS install quirks** (`requirements-tts.txt`). `misaki` (Kokoro's
+    text→phoneme step) still declares `Requires-Python <3.13` though it runs
+    fine on 3.14, so plain pip silently falls back to old versions and dies
+    compiling spaCy — hence `--ignore-requires-python` + exact pins (which also
+    keep litellm's hard `click==8.1.8` / `tokenizers==0.22.2` pins intact).
+    `en_core_web_sm` is pinned as a wheel URL because misaki otherwise tries to
+    pip-install it at runtime from inside the server. And espeak-ng (misaki's
+    fallback for unknown words) `exit()`s the whole process if its data path is
+    ≥160 chars — `tts.py` relocates the data to a short temp path when needed.
+14. **Safari drops `Secure` cookies over `http://localhost`** (Chrome doesn't),
+    which made login silently bounce back to the landing page. Dev cookies are
+    now `SameSite=Lax` without `Secure`; `COOKIE_SECURE=1` restores
+    `SameSite=None; Secure` for HTTPS production.
 
 ## Hackathon compliance (don't lose points / get DQ'd)
 - **MUST disclose AI-assistant use (Claude Code) in the README** — non-disclosure is
@@ -113,6 +126,8 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
 # 1. Python backend
 cd backend
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+# (optional, Apple Silicon) local Kokoro voice — see gotcha 13 for why the flag
+.venv/bin/pip install --ignore-requires-python -r requirements-tts.txt
 cd ..
 
 # 2. Frontend deps + root dev-orchestration deps (concurrently)
@@ -237,6 +252,21 @@ cd frontend && npm run dev
       likely over a WebSocket instead of the current one-shot POST) — not
       pursued; use the Browser engine when live captions matter more than
       Whisper's better technical-vocabulary accuracy.
+- [x] **Local Kokoro TTS (human-sounding interviewer voice).** The browser's
+      SpeechSynthesis voice sounded robotic, so `backend/app/tts.py` renders
+      questions with Kokoro-82M via `mlx-audio` (Apple Silicon; same guarded
+      warm-up / 503-fallback pattern as `stt.py`). Endpoints `GET /api/tts/status`
+      and `POST /api/tts` (JSON text in, WAV out). `speak()` in `speech.ts` keeps
+      its signature — it prefers the server voice (played via Web Audio, which
+      also drives the avatar pulses from real loudness onsets) and falls back to
+      the browser voice on any failure, so `page.tsx` is untouched. Voice via
+      `TTS_VOICE` (default `af_heart`; e.g. `am_michael`, `bf_emma`), kill switch
+      `ENABLE_KOKORO_TTS=0`. **Verified:** a ~7s question renders in ~0.4-0.8s
+      once warm (startup warm-up absorbs the ~9s cold spaCy load); Whisper
+      round-trips Kokoro audio near word-perfect; in headless Chrome: plays to
+      the end with ~3 avatar pulses/s, replay is served from cache (no refetch),
+      cancel stops it instantly, and with `/api/tts` blocked it falls back to
+      `speechSynthesis`. Not available on Windows/Intel (browser voice there).
 
 ## 🚧 Remaining
 - [ ] **UI polish pass** (deferred by decision — do after core features).

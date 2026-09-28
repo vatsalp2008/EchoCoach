@@ -68,6 +68,10 @@ class TranscribeResponse(BaseModel):
     transcript: str
 
 
+class TtsRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+
+
 class SignupRequest(BaseModel):
     display_name: str = Field(min_length=1, max_length=80)
     email: EmailStr

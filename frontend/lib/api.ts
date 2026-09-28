@@ -168,3 +168,20 @@ export function transcribeAudio(audio_b64: string, format = "webm") {
 export async function sttStatus(): Promise<{ available: boolean; model: string }> {
   return getJson<{ available: boolean; model: string }>("/api/stt/status");
 }
+
+// ── text-to-speech (local Kokoro voice) ────────────────────────────────────
+export async function ttsStatus(): Promise<{ available: boolean; voice: string }> {
+  return getJson<{ available: boolean; voice: string }>("/api/tts/status");
+}
+
+/** Question text -> WAV bytes in the server's neural voice. Throws on 503. */
+export async function synthesizeSpeech(text: string): Promise<ArrayBuffer> {
+  const res = await fetch(`${API_BASE}/api/tts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ text }),
+  });
+  if (!res.ok) throw new Error(`/api/tts failed: ${res.status}`);
+  return res.arrayBuffer();
+}

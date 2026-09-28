@@ -10,7 +10,7 @@ from __future__ import annotations
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 
-from . import auth, db, debrief, graph_api, memory, stt
+from . import auth, db, debrief, graph_api, memory, stt, tts
 from .config import COOKIE_SECURE, SESSION_COOKIE, SESSION_TTL_DAYS
 from .schemas import (
     AnswerRequest,
@@ -21,6 +21,7 @@ from .schemas import (
     StartSessionResponse,
     TranscribeRequest,
     TranscribeResponse,
+    TtsRequest,
     UserOut,
 )
 from . import session as session_mod
@@ -72,6 +73,7 @@ async def _startup() -> None:
     db.init_db()
     memory.init()  # configure Cognee's local stack + Gemini providers once
     stt.warm_up()  # load the local Whisper model once; self-guards against failure
+    tts.warm_up()  # same for the local Kokoro voice
 
 
 app.include_router(graph_api.router)
@@ -180,3 +182,20 @@ async def transcribe(req: TranscribeRequest) -> TranscribeResponse:
     except stt.SttUnavailableError as e:
         raise HTTPException(status_code=503, detail=str(e))
     return TranscribeResponse(transcript=text)
+
+
+@app.get("/api/tts/status")
+async def tts_status() -> dict:
+    """Lets the frontend feature-detect the Kokoro voice before asking for audio."""
+    return tts.status()
+
+
+@app.post("/api/tts")
+async def synthesize(req: TtsRequest) -> Response:
+    """Question text -> WAV in the local Kokoro voice. 503 means "use the
+    browser voice instead", exactly like /api/transcribe for STT."""
+    try:
+        audio = await tts.synthesize_wav(req.text)
+    except tts.TtsUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return Response(content=audio, media_type="audio/wav")

@@ -56,6 +56,17 @@ WHISPER_MODEL_FW = os.getenv("WHISPER_MODEL_FW", "small")
 WHISPER_FW_DEVICE = os.getenv("WHISPER_FW_DEVICE", "cpu")      # "cpu" | "cuda"
 WHISPER_FW_COMPUTE = os.getenv("WHISPER_FW_COMPUTE", "int8")   # e.g. int8 | float16
 
+# ── Server-side text-to-speech (Kokoro) ──────────────────────────────────────
+# Additive to the browser's SpeechSynthesis voice (see tts.py): a neural voice
+# that sounds human instead of robotic. Needs the optional requirements-tts.txt
+# (Apple Silicon); without it the frontend keeps using the browser voice.
+ENABLE_KOKORO_TTS = os.getenv("ENABLE_KOKORO_TTS", "1") != "0"
+TTS_MODEL_REPO = os.getenv("TTS_MODEL_REPO", "mlx-community/Kokoro-82M-bf16")
+# Kokoro voice id; the first letter is the accent (a = American, b = British),
+# the second the gender — e.g. af_heart, am_michael, bf_emma, bm_george.
+TTS_VOICE = os.getenv("TTS_VOICE", "af_heart")
+TTS_SPEED = float(os.getenv("TTS_SPEED", "1.0"))
+
 # Keep Cognee's stores inside the repo (gitignored), not in site-packages.
 COGNEE_DATA_DIR = BACKEND_ROOT / ".cognee_data"
 COGNEE_SYSTEM_DIR = BACKEND_ROOT / ".cognee_system"
