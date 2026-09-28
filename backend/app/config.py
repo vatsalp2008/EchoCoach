@@ -16,6 +16,12 @@ BACKEND_ROOT = REPO_ROOT / "backend"
 # Cognee reads several settings from env on import, so load .env first.
 load_dotenv(REPO_ROOT / ".env")
 
+# Everything the app persists (the SQLite DB + Cognee's stores) lives under
+# DATA_DIR. Defaults to backend/ for local dev; on a host, point it at a
+# persistent volume — the rest of a container's filesystem is wiped on deploy.
+DATA_DIR = Path(os.getenv("DATA_DIR") or BACKEND_ROOT)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 # ── App-level LLM (grading + debrief), used by llm_client.py ────────────────
 # Kept SEPARATE from Cognee's LLM: the app talks to Gemini directly for quality
 # grading, while Cognee's cognify/recall/improve run on a local model (Ollama)
@@ -25,7 +31,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 APP_LLM_MODEL = os.getenv("APP_LLM_MODEL", "gemini-2.5-flash")
 
 # App bookkeeping DB (NOT the memory graph — that lives inside Cognee).
-SQLITE_PATH = BACKEND_ROOT / "echocoach.db"
+SQLITE_PATH = DATA_DIR / "echocoach.db"
 
 # ── Auth (email+password now; the model leaves room for Google later) ────────
 # Session is a stateless JWT delivered in an HttpOnly cookie. Set a strong
@@ -67,9 +73,9 @@ TTS_MODEL_REPO = os.getenv("TTS_MODEL_REPO", "mlx-community/Kokoro-82M-bf16")
 TTS_VOICE = os.getenv("TTS_VOICE", "af_heart")
 TTS_SPEED = float(os.getenv("TTS_SPEED", "1.0"))
 
-# Keep Cognee's stores inside the repo (gitignored), not in site-packages.
-COGNEE_DATA_DIR = BACKEND_ROOT / ".cognee_data"
-COGNEE_SYSTEM_DIR = BACKEND_ROOT / ".cognee_system"
+# Keep Cognee's stores under DATA_DIR (gitignored in the repo), not in site-packages.
+COGNEE_DATA_DIR = DATA_DIR / ".cognee_data"
+COGNEE_SYSTEM_DIR = DATA_DIR / ".cognee_system"
 
 
 def configure_cognee() -> None:

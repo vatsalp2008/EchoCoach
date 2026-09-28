@@ -1,7 +1,10 @@
-// Thin client for the EchoCoach backend. Base URL is overridable via
-// NEXT_PUBLIC_API_BASE; defaults to the local FastAPI dev server.
+// Thin client for the EchoCoach backend. Local dev calls the FastAPI dev
+// server directly; production builds use same-origin /api/... paths, which
+// next.config.ts proxies to BACKEND_URL. NEXT_PUBLIC_API_BASE overrides both.
 // Every call sends credentials so the HttpOnly session cookie flows.
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
 
 export type Domain = "technical" | "behavioral";
 export type SessionMode = "technical" | "behavioral" | "full";

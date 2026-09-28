@@ -110,6 +110,17 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
     which made login silently bounce back to the landing page. Dev cookies are
     now `SameSite=Lax` without `Secure`; `COOKIE_SECURE=1` restores
     `SameSite=None; Secure` for HTTPS production.
+15. **Deploying: frontend on Vercel, backend on a host with a persistent disk**
+    (e.g. Railway + a volume). Vercel can't run the backend: its functions and
+    containers are stateless, and all our state is local files (SQLite + Cognee's
+    LanceDB/Kuzu). Wiring: set `DATA_DIR` (backend) to the volume's mount path,
+    and `BACKEND_URL` (Vercel) to the backend's URL — `next.config.ts` then
+    proxies `/api/*` there, so the session cookie is first-party (Safari-safe)
+    and there's no CORS. `requirements.txt` is now pinned: unpinned, a fresh
+    Linux install picked cognee 1.6.1 / google-genai 2.25 (untested) instead of
+    1.2.2 / 2.10. MLX Whisper + Kokoro are Apple-Silicon-only, so a Linux server
+    uses browser STT/TTS; set `ENABLE_WHISPER_STT=0` there so it doesn't load
+    faster-whisper's ~460MB model at startup. Backend RSS is ~330MB at idle.
 
 ## Hackathon compliance (don't lose points / get DQ'd)
 - **MUST disclose AI-assistant use (Claude Code) in the README** — non-disclosure is
