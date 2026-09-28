@@ -44,7 +44,7 @@ Why a **graph** and not a flat list: interview topics have genuine prerequisite/
 - **Live graph visualization** (`/graph`) — force-directed, colored by signal (red struggled · amber partial · green mastered · sky archived · gray unassessed)
 - **Technical, Behavioral, and Full** interview modes with domain-appropriate grading
 - **Per-user profiles** — each username gets its own memory graph
-- **Voice mode** — Web Speech STT/TTS + a volume-driven avatar (text stays a fallback); optional local Whisper STT and a human-sounding local Kokoro voice on Apple Silicon
+- **Voice mode** — Web Speech STT/TTS + an interviewer orb with a live audio visualizer (text stays a fallback); optional local Whisper STT and a human-sounding local Kokoro voice on Apple Silicon
 - **Code editor** (Monaco) for DSA questions
 - **Whiteboard** — sketch a design; the multimodal grader (Gemini vision) sees it
 - **Company-specific grounding** — give a company name and, once ingested, questions get subtly rewritten against real reported interview experience (GitHub interview-question repos today; Reddit is supported in code but skipped by default — see `docs/reddit_api_setup.md` for why)

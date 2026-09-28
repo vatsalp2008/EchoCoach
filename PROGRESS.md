@@ -267,6 +267,18 @@ cd frontend && npm run dev
       the end with ~3 avatar pulses/s, replay is served from cache (no refetch),
       cancel stops it instantly, and with `/api/tts` blocked it falls back to
       `speechSynthesis`. Not available on Windows/Intel (browser voice there).
+- [x] **Interviewer orb redesign + live audio visualizer.** `Avatar.tsx` is now a
+      glossy indigo orb (theme tokens, red while listening, replay on hover/focus)
+      ringed by 64 canvas-drawn bars showing the Kokoro voice's real spectrum
+      (`getSpeechLevels()` in `speech.ts`: 16 log bands, 120 Hz-7.5 kHz, with a
+      +6 dB/oct tilt calibrated on Kokoro output so treble bands move too). The
+      browser voice has no audio stream, so its word boundaries drive a
+      procedural stand-in tuned to look the same. Drawn from refs (no per-frame
+      React renders); the loop sleeps when idle. **Verified in headless Chrome,
+      light + dark:** real-audio frames vary with speech (vowels bulge top/bottom,
+      "s" sounds flare the sides), 0 animation frames once idle, keyboard focus
+      ring + replay icon, and under `prefers-reduced-motion` the speaking/listening
+      states render as static frames.
 
 ## 🚧 Remaining
 - [ ] **UI polish pass** (deferred by decision — do after core features).

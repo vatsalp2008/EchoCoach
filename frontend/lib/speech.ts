@@ -102,6 +102,7 @@ export function cancelSpeak(): void {
     /* already stopped */
   }
   _source = null;
+  _analyser = null;
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     window.speechSynthesis.cancel();
   }
@@ -110,11 +111,12 @@ export function cancelSpeak(): void {
 // ── Server-side TTS (local Kokoro voice) - preferred over the browser voice ──
 // The browser's SpeechSynthesis sounds robotic, so the backend renders each
 // question with a neural voice and we play it through Web Audio - which also
-// gives us the real signal to pulse the avatar with. Any failure (engine not
+// gives us the real signal for the avatar's visualizer. Any failure (engine not
 // installed, network, autoplay blocked) falls back to speakBrowser above.
 
 let _ctx: AudioContext | null = null;
 let _source: AudioBufferSourceNode | null = null;
+let _analyser: AnalyserNode | null = null; // set only while server audio plays
 let _speakToken = 0;
 let _serverTts: Promise<boolean> | null = null;
 let _lastAudio: { text: string; buffer: AudioBuffer } | null = null; // makes replay instant
@@ -170,6 +172,7 @@ async function speakServer(text: string, h: SpeakHandlers, token: number): Promi
     src.buffer = buffer;
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024; // ~21ms window - about one syllable
+    analyser.smoothingTimeConstant = 0.75; // the value the visualizer was tuned with
     src.connect(analyser);
     analyser.connect(ctx.destination);
 
@@ -196,9 +199,11 @@ async function speakServer(text: string, h: SpeakHandlers, token: number): Promi
     src.onended = () => {
       cancelAnimationFrame(raf);
       if (_source === src) _source = null;
+      if (_analyser === analyser) _analyser = null;
       h.onEnd?.();
     };
     _source = src;
+    _analyser = analyser;
     h.onStart?.();
     src.start();
     raf = requestAnimationFrame(tick);
@@ -206,6 +211,40 @@ async function speakServer(text: string, h: SpeakHandlers, token: number): Promi
   } catch {
     return false;
   }
+}
+
+// Visualizer tuning, calibrated on Kokoro output through this exact analyser
+// setup: speech loses ~7 dB/octave, so without the tilt the treble bands would
+// never move; -70..-30 dB then lands typical speech mid-range, peaks near 1.
+const LEVEL_F_LO = 120; // Hz
+const LEVEL_F_HI = 7500;
+const LEVEL_TILT_DB_PER_OCT = 6; // applied above 250 Hz
+const LEVEL_DB_FLOOR = -70;
+const LEVEL_DB_CEIL = -30;
+let _spectrum: Float32Array<ArrayBuffer> | null = null;
+
+/** While the server voice plays, fills `out` with per-band loudness (0..1,
+ * log-spaced from low to high pitch) for the avatar's visualizer. Returns
+ * false when there's no real audio to analyze (browser voice, or not speaking). */
+export function getSpeechLevels(out: Float32Array): boolean {
+  const a = _analyser;
+  if (!a) return false;
+  if (_spectrum?.length !== a.frequencyBinCount) _spectrum = new Float32Array(a.frequencyBinCount);
+  a.getFloatFrequencyData(_spectrum);
+  const binHz = a.context.sampleRate / a.fftSize;
+  const n = out.length;
+  for (let b = 0; b < n; b++) {
+    const f0 = LEVEL_F_LO * (LEVEL_F_HI / LEVEL_F_LO) ** (b / n);
+    const f1 = LEVEL_F_LO * (LEVEL_F_HI / LEVEL_F_LO) ** ((b + 1) / n);
+    const lo = Math.max(1, Math.floor(f0 / binHz));
+    const hi = Math.max(lo + 1, Math.floor(f1 / binHz));
+    let sum = 0;
+    for (let k = lo; k < hi; k++) sum += _spectrum[k];
+    const tilt = LEVEL_TILT_DB_PER_OCT * Math.max(0, Math.log2(Math.sqrt(f0 * f1) / 250));
+    const db = sum / (hi - lo) + tilt;
+    out[b] = Math.min(1, Math.max(0, (db - LEVEL_DB_FLOOR) / (LEVEL_DB_CEIL - LEVEL_DB_FLOOR)));
+  }
+  return true;
 }
 
 // ── Server-side STT (Whisper) recording - a second, opt-in engine ───────────
