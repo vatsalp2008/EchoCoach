@@ -11,7 +11,7 @@ from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import auth, db, debrief, graph_api, memory, stt
-from .config import SESSION_COOKIE, SESSION_TTL_DAYS
+from .config import COOKIE_SECURE, SESSION_COOKIE, SESSION_TTL_DAYS
 from .schemas import (
     AnswerRequest,
     AnswerResponse,
@@ -47,18 +47,21 @@ def current_user(ec_session: str | None = Cookie(default=None)) -> dict:
     return user
 
 
+# Local dev: localhost:3000 and localhost:8000 are different origins but the
+# same *site* (ports don't count), so SameSite=Lax cookies flow on credentialed
+# fetches. Keep Secure off there — Safari silently drops Secure cookies over
+# http://localhost, which broke login. Production (COOKIE_SECURE=1, HTTPS)
+# uses SameSite=None; Secure so a cross-site frontend still gets the cookie.
+_COOKIE_SAMESITE = "none" if COOKIE_SECURE else "lax"
+
+
 def _set_session_cookie(response: Response, user_id: str) -> None:
     response.set_cookie(
         key=SESSION_COOKIE,
         value=auth.make_token(user_id),
         httponly=True,               # not readable by JS -> not stealable via XSS
-        # Frontend (:3000) and API (:8000) are different origins, so the cookie
-        # must be SameSite=None to be sent on cross-origin fetches. None requires
-        # Secure — Chrome allows Secure cookies on http://localhost (a secure
-        # context), and production is HTTPS. (If you later serve both from one
-        # origin, switch this to "lax".)
-        samesite="none",
-        secure=True,
+        samesite=_COOKIE_SAMESITE,
+        secure=COOKIE_SECURE,
         max_age=SESSION_TTL_DAYS * 24 * 3600,
         path="/",
     )
@@ -114,7 +117,9 @@ async def auth_google(payload: dict, response: Response) -> UserOut:
 
 @app.post("/api/logout")
 async def logout(response: Response) -> dict:
-    response.delete_cookie(SESSION_COOKIE, path="/", samesite="none", secure=True)
+    response.delete_cookie(
+        SESSION_COOKIE, path="/", samesite=_COOKIE_SAMESITE, secure=COOKIE_SECURE
+    )
     return {"ok": True}
 
 
