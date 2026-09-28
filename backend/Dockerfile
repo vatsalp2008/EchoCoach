@@ -1,0 +1,36 @@
+# Backend image for a stateless host (Google Cloud Run). All state lives in
+# Postgres (DATABASE_URL, e.g. Neon) — the app's tables and Cognee's memory
+# graph — so nothing here needs a persistent disk.
+#
+#   gcloud run deploy echocoach-api --source backend ...   (see PROGRESS.md)
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    # The embedding model is baked in below; fastembed reads it from here at
+    # runtime instead of downloading ~130 MB on every cold start.
+    FASTEMBED_CACHE_PATH=/opt/fastembed \
+    # Server-side Whisper would load a ~460 MB model at startup (the browser's
+    # speech recognition covers voice answers), and Kokoro is Apple-Silicon-only.
+    ENABLE_WHISPER_STT=0 \
+    ENABLE_KOKORO_TTS=0 \
+    # Cognee pings the LLM once per process before its first op; each cold
+    # start would spend a request of the Gemini quota on it.
+    COGNEE_SKIP_CONNECTION_TEST=true \
+    # Scratch only (Cognee's cache + raw upload files) — real state is in Postgres.
+    DATA_DIR=/tmp/echocoach
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install -r requirements.txt \
+ && python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')" \
+ && useradd --create-home app \
+ && chown -R app /opt/fastembed
+
+COPY app ./app
+USER app
+
+# Cloud Run sets PORT (8080 by default).
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8080}"]

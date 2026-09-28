@@ -77,6 +77,9 @@ backend/.venv/bin/python backend/scripts/cognee_smoke_test.py
 # 5. (Optional) seed a demo user's graph so the demo opens with shape
 backend/.venv/bin/python backend/scripts/seed_sessions.py demo
 
+# (Optional) backend tests — SQLite always; Postgres too if TEST_DATABASE_URL is set
+backend/.venv/bin/python -m pytest backend/tests -q
+
 # 6. Run everything — one command, from the repo root
 npm run dev              # backend on :8000, frontend on :3000
 ```

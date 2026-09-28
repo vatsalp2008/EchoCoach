@@ -14,7 +14,7 @@ Passwords are hashed with bcrypt. The `user_id` used everywhere else in the app
 
 from __future__ import annotations
 
-import sqlite3
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -38,7 +38,7 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _public(row: sqlite3.Row) -> dict:
+def _public(row: Mapping) -> dict:
     """Public user shape returned to the client — never includes the hash."""
     return {
         "id": str(row["id"]),
@@ -73,7 +73,7 @@ def signup(*, email: str, display_name: str, password: str) -> dict:
             password_hash=hash_password(password),
             created_at=_now(),
         )
-    except sqlite3.IntegrityError as e:  # race on the unique email
+    except db.IntegrityError as e:  # race on the unique email
         raise EmailTakenError(email) from e
     row = db.get_user_by_id(uid)
     return _public(row)

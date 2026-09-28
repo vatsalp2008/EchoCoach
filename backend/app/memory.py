@@ -11,6 +11,12 @@ Signatures below were verified against the INSTALLED cognee 1.2.2 via
   recall(query_text, *, datasets=[...], top_k=..., query_type=...)
   improve(dataset=..., *, run_in_background=...)        # one dataset per call
   forget(*, dataset=..., dataset_id=..., everything=...)
+
+Postgres mode (config.COGNEE_SHARED_STORE): every dataset lives in one shared
+graph/vector store instead of its own database, and Cognee then ignores
+`datasets=` when searching. So writes are tagged with their dataset as a node
+set, and dataset-scoped recalls filter on it — keeping, e.g., company grounding
+from pulling in other users' interview memories.
 """
 
 from __future__ import annotations
@@ -19,9 +25,11 @@ import asyncio
 import time
 from typing import Any
 
-import cognee
+# config first: in Postgres mode it sets the env vars Cognee reads on import.
+from .config import COGNEE_SHARED_STORE, configure_cognee
 
-from .config import configure_cognee
+import cognee  # noqa: E402
+
 from .llm_client import _is_quota_error
 
 _configured = False
@@ -86,6 +94,7 @@ async def remember(
     init()
     if not _graph_writes_open():
         return None  # breaker open — skip the write, mirror stays authoritative
+    scope = {"node_set": [dataset_name]} if COGNEE_SHARED_STORE else {}
     try:
         return await asyncio.wait_for(
             cognee.remember(
@@ -93,6 +102,7 @@ async def remember(
                 dataset_name=dataset_name,
                 run_in_background=run_in_background,
                 self_improvement=self_improvement,
+                **scope,
             ),
             timeout=_BOUND_S,
         )
@@ -135,8 +145,10 @@ async def recall(
     Time-bounded so a quota-stalled completion can't hang the caller.
     """
     init()
+    scope = {"node_name": datasets} if COGNEE_SHARED_STORE and datasets else {}
     return await asyncio.wait_for(
-        cognee.recall(query_text, datasets=datasets, top_k=top_k), timeout=_READ_BOUND_S
+        cognee.recall(query_text, datasets=datasets, top_k=top_k, **scope),
+        timeout=_READ_BOUND_S,
     )
 
 

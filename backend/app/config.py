@@ -1,12 +1,15 @@
 """Central configuration for EchoCoach.
 
 Loads .env from the repo root and configures Cognee's local, self-hosted stack
-(SQLite + LanceDB + Kuzu) plus its Gemini LLM/embedding providers. Import this
-module once, early, before any Cognee operation runs.
+(SQLite + LanceDB + Kuzu) plus its Gemini LLM/embedding providers — or, when
+DATABASE_URL is set, points both the app and Cognee at Postgres instead. Import
+this module once, early, before any Cognee operation runs.
 """
 
+import json
 import os
 from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from dotenv import load_dotenv
 
@@ -21,6 +24,56 @@ load_dotenv(REPO_ROOT / ".env")
 # persistent volume — the rest of a container's filesystem is wiped on deploy.
 DATA_DIR = Path(os.getenv("DATA_DIR") or BACKEND_ROOT)
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── Postgres mode ─────────────────────────────────────────────────────────────
+# Unset (local dev): SQLite + Cognee's local file stores under DATA_DIR.
+# Set to a Postgres URL (e.g. Neon's connection string) and ALL state moves to
+# that one database — the app's tables (in their own `echocoach` schema) and
+# Cognee's relational, vector (pgvector) and graph stores — so the server
+# itself keeps nothing on disk and can run on a stateless host (Cloud Run).
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+# Cognee normally isolates every dataset in its own database. In Postgres that
+# means a CREATE DATABASE per dataset (~8 MB each, one per user x topic), which
+# a free-tier database fills fast — so Postgres mode keeps every dataset in the
+# one shared store, and memory.py tags writes / filters reads by dataset
+# instead (node sets) so a dataset-scoped recall still only sees its dataset.
+COGNEE_SHARED_STORE = bool(DATABASE_URL)
+
+
+def _postgres_parts(url: str) -> dict:
+    u = urlsplit(url)
+    sslmode = (parse_qs(u.query).get("sslmode") or [""])[0]
+    return {
+        "host": u.hostname or "localhost",
+        "port": u.port or 5432,
+        "username": unquote(u.username or ""),
+        "password": unquote(u.password or ""),
+        "name": u.path.lstrip("/"),
+        # Managed Postgres (Neon) requires TLS; Cognee's asyncpg engines take
+        # it as a connect arg rather than a URL param.
+        "ssl": sslmode in ("require", "verify-ca", "verify-full"),
+    }
+
+
+def _point_cognee_at_postgres(url: str) -> None:
+    """Translate DATABASE_URL into the env vars Cognee reads for its relational,
+    vector and graph stores, overriding any local-stack values from .env — a
+    DATABASE_URL means Postgres, whatever DB_PROVIDER=sqlite says. Runs before
+    Cognee is imported, and again in configure_cognee() (see there for why)."""
+    p = _postgres_parts(url)
+    os.environ["DB_PROVIDER"] = "postgres"
+    os.environ["VECTOR_DB_PROVIDER"] = "pgvector"
+    os.environ["GRAPH_DATABASE_PROVIDER"] = "postgres"
+    os.environ["ENABLE_BACKEND_ACCESS_CONTROL"] = "false"  # see COGNEE_SHARED_STORE
+    for prefix in ("DB_", "VECTOR_DB_", "GRAPH_DATABASE_"):
+        for key in ("host", "port", "username", "password", "name"):
+            os.environ[prefix + key.upper()] = str(p[key])
+    if p["ssl"]:
+        os.environ["DATABASE_CONNECT_ARGS"] = json.dumps({"ssl": "require"})
+
+
+if DATABASE_URL:
+    _point_cognee_at_postgres(DATABASE_URL)
 
 # ── App-level LLM (grading + debrief), used by llm_client.py ────────────────
 # Kept SEPARATE from Cognee's LLM: the app talks to Gemini directly for quality
@@ -103,6 +156,33 @@ def configure_cognee() -> None:
     COGNEE_SYSTEM_DIR.mkdir(parents=True, exist_ok=True)
     cognee.config.data_root_directory(str(COGNEE_DATA_DIR))
     cognee.config.system_root_directory(str(COGNEE_SYSTEM_DIR))
+
+    if DATABASE_URL:
+        # `import cognee` re-reads .env with override=True, putting the local
+        # stack's providers (DB_PROVIDER=sqlite, ...) back over the env set at
+        # the top of this module — so restate them, and set Cognee's config
+        # objects directly, which nothing reloads.
+        _point_cognee_at_postgres(DATABASE_URL)
+        p = _postgres_parts(DATABASE_URL)
+        cognee.config.set_relational_db_config({
+            "db_provider": "postgres", "db_host": p["host"], "db_port": str(p["port"]),
+            "db_username": p["username"], "db_password": p["password"], "db_name": p["name"],
+            "database_connect_args": (("ssl", "require"),) if p["ssl"] else None,
+            # A serverless Postgres (Neon) drops idle connections when it scales
+            # to zero; ping before reuse. Cognee's graph and pgvector engines
+            # inherit these. (Tuple of pairs: Cognee caches engines by config.)
+            "pool_args": (("pool_pre_ping", True), ("pool_recycle", 280)),
+        })
+        cognee.config.set_vector_db_config({
+            "vector_db_provider": "pgvector", "vector_db_host": p["host"],
+            "vector_db_port": p["port"], "vector_db_username": p["username"],
+            "vector_db_password": p["password"], "vector_db_name": p["name"],
+        })
+        cognee.config.set_graph_db_config({
+            "graph_database_provider": "postgres", "graph_database_host": p["host"],
+            "graph_database_port": p["port"], "graph_database_username": p["username"],
+            "graph_database_password": p["password"], "graph_database_name": p["name"],
+        })
 
     # Run Kuzu (graph) and LanceDB (vector) IN-PROCESS. Cognee's default
     # out-of-process DB workers hold file locks that collide when sequential

@@ -110,17 +110,36 @@ the spec's 5 phases; we execute them in order, each demoable before the next.
     which made login silently bounce back to the landing page. Dev cookies are
     now `SameSite=Lax` without `Secure`; `COOKIE_SECURE=1` restores
     `SameSite=None; Secure` for HTTPS production.
-15. **Deploying: frontend on Vercel, backend on a host with a persistent disk**
-    (e.g. Railway + a volume). Vercel can't run the backend: its functions and
-    containers are stateless, and all our state is local files (SQLite + Cognee's
-    LanceDB/Kuzu). Wiring: set `DATA_DIR` (backend) to the volume's mount path,
-    and `BACKEND_URL` (Vercel) to the backend's URL — `next.config.ts` then
-    proxies `/api/*` there, so the session cookie is first-party (Safari-safe)
-    and there's no CORS. `requirements.txt` is now pinned: unpinned, a fresh
-    Linux install picked cognee 1.6.1 / google-genai 2.25 (untested) instead of
-    1.2.2 / 2.10. MLX Whisper + Kokoro are Apple-Silicon-only, so a Linux server
-    uses browser STT/TTS; set `ENABLE_WHISPER_STT=0` there so it doesn't load
-    faster-whisper's ~460MB model at startup. Backend RSS is ~330MB at idle.
+15. **Deploying: Vercel (frontend) + Cloud Run (backend) + Neon (Postgres), all
+    free tiers.** Vercel can't run the backend (stateless, no disk). Set
+    `BACKEND_URL` on Vercel and `next.config.ts` proxies `/api/*` to the backend,
+    so the session cookie is first-party (Safari-safe) and there's no CORS.
+    `requirements.txt` is pinned: unpinned, a fresh Linux install picked cognee
+    1.6.1 / google-genai 2.25 (untested) instead of 1.2.2 / 2.10. MLX Whisper +
+    Kokoro are Apple-Silicon-only, so a Linux server uses browser STT/TTS.
+16. **Postgres mode (`DATABASE_URL`)** is what makes the backend stateless: the
+    app's tables (own `echocoach` schema — Cognee has its own `users` table in
+    `public`) and Cognee's relational + pgvector + postgres-graph stores all live
+    in that one database; unset, everything is local SQLite/Kuzu/LanceDB as before.
+    Gotchas, all handled in code: (a) Cognee's default per-dataset isolation does
+    a `CREATE DATABASE` per dataset (~8 MB each, one per user × topic) — that
+    fills Neon's free 0.5 GB, so it's off in Postgres mode and `memory.py` tags
+    writes with `node_set=[dataset]` / filters scoped recalls with `node_name`
+    instead (else company grounding could read other users' memories).
+    (b) `import cognee` runs `load_dotenv(override=True)`, putting `.env`'s
+    `DB_PROVIDER=sqlite` etc. back — `configure_cognee()` re-applies Postgres via
+    `cognee.config.set_*_db_config`. (c) Interview turn state lives in
+    `sessions.state`, not process memory, so a restart or another instance can
+    continue any interview. (d) Cloud Run needs `--no-cpu-throttling` so the
+    fire-and-forget Cognee writes finish after the response. (e) The image sets
+    `COGNEE_SKIP_CONNECTION_TEST=true` (saves a Gemini request per cold start).
+    Tests: `backend/tests` (pytest) run every db/state test on SQLite and on
+    Postgres when `TEST_DATABASE_URL` is set; `scripts/postgres_smoke.py` checks
+    a real database (incl. Cognee + scoped recall, ~5-8 Gemini requests).
+17. **The `AQ.` Gemini key is capped at 20 requests/day *per model*** — Cognee's
+    `gemini-2.5-flash-lite` alone can exhaust it in a few interviews (the app
+    falls back gracefully, but memory writes stop). Use a standard AI Studio
+    `AIza` key for a public deployment.
 
 ## Hackathon compliance (don't lose points / get DQ'd)
 - **MUST disclose AI-assistant use (Claude Code) in the README** — non-disclosure is

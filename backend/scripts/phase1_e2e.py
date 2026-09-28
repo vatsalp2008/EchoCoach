@@ -82,15 +82,16 @@ async def main():
     # Follow-up cap: no topic should have a counter above 2.
     with db.connect() as conn:
         over = conn.execute(
-            "SELECT topic, count FROM follow_up_counters WHERE count > 2"
-        ).fetchall()
+            db._sql("SELECT topic, count FROM {follow_up_counters} WHERE count > 2")
+        ).mappings().all()
     assert not over, f"follow-up cap breached: {[dict(r) for r in over]}"
     print("\n[ok] follow-up cap (<=2) holds")
 
     # Debrief generates and reads as coaching text.
-    sid1 = db.connect().__enter__().execute(
-        "SELECT id FROM sessions ORDER BY started_at LIMIT 1"
-    ).fetchone()["id"]
+    with db.connect() as conn:
+        sid1 = conn.execute(
+            db._sql("SELECT id FROM {sessions} ORDER BY started_at LIMIT 1")
+        ).scalar_one()
     report = await debrief.generate_debrief(sid1)
     assert "## Topics covered this session" in report, "debrief missing sections"
     print("[ok] debrief generated:\n" + "-" * 60)

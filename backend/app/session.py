@@ -39,8 +39,9 @@ MAX_MAIN_QUESTIONS = 4  # main topics per returning session (diagnostics ignore 
 # Severity for routing: weakest = highest. avoided outranks struggled (spec 5.4).
 _SEVERITY = {"avoided": 4, "struggled": 3, "partial": 2, "mastered": 0}
 
-# session_id -> live turn state
-_ACTIVE: dict[str, dict] = {}
+# Live turn state (current question, asked topics, diagnostic queue) is saved to
+# the sessions table after every turn — not held in process memory — so an
+# interview survives a server restart and works on any instance.
 
 
 def _slug(user_id: str) -> str:
@@ -112,7 +113,6 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
         "current": None,
         "company_slug": company_slug,
     }
-    _ACTIVE[session_id] = state
 
     if first:
         q = get_question(state["diagnostic_queue"].pop(0))
@@ -126,6 +126,7 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
         "question": question_text, "is_follow_up": False,
     }
     state["asked_topics"].append(q["topic"])
+    db.save_session_state(session_id, state)
     return StartSessionResponse(
         session_id=session_id, question_id=q["id"], topic=q["topic"],
         question=question_text, domain=q["domain"], coding=is_coding(q["topic"]),
@@ -135,9 +136,19 @@ async def start_session(req: StartSessionRequest) -> StartSessionResponse:
 
 # ── answer -> grade -> remember -> follow-up / next ──────────────────────────
 async def submit_answer(req: AnswerRequest) -> AnswerResponse:
-    state = _ACTIVE.get(req.session_id)
+    state = db.load_session_state(req.session_id)
     if state is None or state.get("current") is None:
         raise KeyError("unknown or inactive session")
+    try:
+        resp = await _answer(req, state)
+    except Exception:
+        db.save_session_state(req.session_id, state)  # keep whatever the turn got through
+        raise
+    db.save_session_state(req.session_id, None if resp.done else state)
+    return resp
+
+
+async def _answer(req: AnswerRequest, state: dict) -> AnswerResponse:
     current = state["current"]
     user_id = state["user_id"]
 
@@ -268,7 +279,6 @@ async def _end(session_id: str, user_id: str) -> AnswerResponse:
             pass  # improve is best-effort reinforcement; never fail the session
         await _maybe_forget(topic, user_id)
     db.end_session(session_id, _now())
-    _ACTIVE.pop(session_id, None)
     return AnswerResponse(done=True)
 
 
@@ -277,17 +287,7 @@ def _is_first_session(mode: str, user_id: str) -> bool:
     """No graded signals yet for this user in this mode => first session, so run
     the diagnostic set rather than routing from an empty history. 'full' counts
     signals in any domain."""
-    with db.connect() as conn:
-        if mode == "full":
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM grading_signals WHERE user_id=?", (user_id,)
-            ).fetchone()
-        else:
-            row = conn.execute(
-                "SELECT COUNT(*) AS n FROM grading_signals WHERE user_id=? AND domain=?",
-                (user_id, mode),
-            ).fetchone()
-    return row["n"] == 0
+    return db.count_signals(user_id, None if mode == "full" else mode) == 0
 
 
 async def _pick_next_topic(

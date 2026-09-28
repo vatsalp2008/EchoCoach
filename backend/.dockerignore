@@ -1,0 +1,14 @@
+# Keep the build context to what the image needs (requirements + app/).
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+scripts/
+# Local state and secrets never go into the image.
+*.db
+.cognee_data/
+.cognee_system/
+.data_storage/
+.env
+.env.*

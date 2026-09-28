@@ -82,9 +82,7 @@ async def run(answers: dict[str, str], label: str) -> None:
 
 async def main() -> None:
     db.init_db()
-    with db.connect() as conn:
-        conn.execute("DELETE FROM grading_signals WHERE user_id=?", (USER,))
-        conn.execute("DELETE FROM sessions WHERE user_id=?", (USER,))
+    db.delete_user_history(USER)
     print(f"Seeding demo user {USER!r} with 2 sessions through the real pipeline…")
 
     await run(SESSION_1, "session 1")
