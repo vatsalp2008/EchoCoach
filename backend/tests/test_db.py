@@ -167,3 +167,20 @@ def test_database_url_points_cognee_at_postgres(load_db, monkeypatch):
         assert env[prefix + "NAME"] == "neondb"
     assert env["ENABLE_BACKEND_ACCESS_CONTROL"] == "false"
     assert env["DATABASE_CONNECT_ARGS"] == '{"ssl": "require"}'
+
+
+def test_database_password_masked_in_cognee_migration_log(load_db, monkeypatch, caplog):
+    for key in ("DB_PROVIDER", "VECTOR_DB_PROVIDER", "GRAPH_DATABASE_PROVIDER",
+                "ENABLE_BACKEND_ACCESS_CONTROL", "DATABASE_CONNECT_ARGS"):
+        monkeypatch.setenv(key, "")
+    for prefix in ("DB_", "VECTOR_DB_", "GRAPH_DATABASE_"):
+        for suffix in ("HOST", "PORT", "USERNAME", "PASSWORD", "NAME"):
+            monkeypatch.setenv(prefix + suffix, "")
+    load_db("postgresql://owner:s3cret-pw@ep-x.neon.tech/neondb?sslmode=require")
+    import logging
+
+    with caplog.at_level(logging.INFO, logger="alembic.env"):
+        logging.getLogger("alembic.env").info(
+            "Using database: %s", "postgresql+asyncpg://owner:s3cret-pw@ep-x.neon.tech:5432/neondb")
+    assert "s3cret-pw" not in caplog.text
+    assert "postgresql+asyncpg://owner:***@ep-x.neon.tech:5432/neondb" in caplog.text

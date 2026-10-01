@@ -40,6 +40,11 @@ async def main() -> None:
     from app.llm_client import _is_quota_error
 
     memory.init()
+    # From a laptop every query crosses the internet to the database (~70 ms,
+    # vs ~1 ms from Cloud Run beside it), and a first run also creates Cognee's
+    # tables and downloads the embedding model — so allow far more than the
+    # app's production bound on a single write.
+    memory._BOUND_S = 300
     try:
         await memory.remember(
             "Smoke Test Co interview reports: candidates were asked to design a rate limiter "
@@ -52,9 +57,13 @@ async def main() -> None:
             dataset_name=PRIVATE, self_improvement=False,
         )
     except Exception as e:
-        if isinstance(e, asyncio.TimeoutError) or _is_quota_error(e):
+        if _is_quota_error(e):
             print("[FAIL] the Gemini key is out of quota (cognify needs the LLM) — the "
                   "database side is fine; rerun after the daily reset.")
+            sys.exit(2)
+        if isinstance(e, asyncio.TimeoutError):
+            print("[FAIL] a memory write timed out even with the extended bound — check "
+                  "the network to the database, then rerun.")
             sys.exit(2)
         raise
     names = {d.name for d in await memory.list_datasets()}

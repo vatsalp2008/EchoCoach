@@ -15,14 +15,15 @@ Do the steps in order — each one needs a value from the one before.
 ## 1. Neon (the database) — ~5 minutes
 
 1. Sign up at [neon.com](https://neon.com) (no card needed).
-2. Create a project: name `echocoach`, region **AWS US East (N. Virginia)**.
+2. Create a project: name `echocoach`, region **AWS US East** — Ohio (`us-east-2`) or N. Virginia (`us-east-1`). Note which: Cloud Run goes next to it in step 2.
 3. On the project dashboard click **Connect**, turn **Connection pooling off**, and copy the connection string. It looks like:
-   `postgresql://neondb_owner:••••@ep-xxxx.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+   `postgresql://neondb_owner:••••@ep-xxxx.us-east-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require`
+   Treat it like a password — it is one. If it ever ends up somewhere public (a chat, an issue, a screenshot with "Show password" on), click **Reset password** in that same dialog and use the new string.
 4. Check it works from your Mac (spends ~5-8 Gemini requests — run it when the key has quota):
    ```bash
    DATABASE_URL='<the connection string>' backend/.venv/bin/python backend/scripts/postgres_smoke.py
    ```
-   Every line should say `[ok]`. The app creates its tables on first start; you don't run any SQL.
+   Every line should say `[ok]`. The first run takes a couple of minutes (it creates Cognee's tables and downloads the embedding model). The app creates its own tables on first start; you don't run any SQL.
 
 ## 2. Google Cloud Run (the backend) — ~20 minutes
 
@@ -50,11 +51,11 @@ Do the steps in order — each one needs a value from the one before.
    GITHUB_TOKEN: "<from .env>"
    ```
    Don't copy `DB_PROVIDER`, `VECTOR_DB_PROVIDER` or `GRAPH_DATABASE_PROVIDER` — `DATABASE_URL` sets those.
-5. Deploy, from the repo root:
+5. Deploy, from the repo root. Use the Cloud Run region next to your Neon database — every memory-graph operation is many small queries, so this matters: Neon in Ohio (`us-east-2`) → `us-east5` (Columbus); Neon in N. Virginia (`us-east-1`) → `us-east4`.
    ```bash
    gcloud run deploy echocoach-api \
      --source backend \
-     --region us-east4 \
+     --region us-east5 \
      --allow-unauthenticated \
      --cpu 1 --memory 2Gi \
      --no-cpu-throttling \
@@ -65,7 +66,7 @@ Do the steps in order — each one needs a value from the one before.
    - `--no-cpu-throttling` keeps the CPU on after a response is sent, so the memory-graph saves that run in the background finish.
    - `--min-instances 0` lets it scale to zero when nobody's using it (that's what keeps it free); the first visit after a quiet spell waits ~10-20 s while it starts.
    - `--max-instances 1` caps usage (and cost) at one server.
-6. It prints a **Service URL** like `https://echocoach-api-xxxxxxxx.us-east4.run.app`. Opening `<Service URL>/api/health` should show `{"status":"ok"}`.
+6. It prints a **Service URL** like `https://echocoach-api-123456789012.us-east5.run.app`. Opening `<Service URL>/api/health` should show `{"status":"ok"}`.
 
 To ship backend changes later, run the same `gcloud run deploy` command again.
 

@@ -7,7 +7,9 @@ this module once, early, before any Cognee operation runs.
 """
 
 import json
+import logging
 import os
+import re
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
@@ -72,8 +74,23 @@ def _point_cognee_at_postgres(url: str) -> None:
         os.environ["DATABASE_CONNECT_ARGS"] = json.dumps({"ssl": "require"})
 
 
+class _MaskDatabasePassword(logging.Filter):
+    """Cognee's migration step logs its full database URL at every startup —
+    password included — straight into the host's logs. Mask it. A filter on
+    the logger (not a level) survives the fileConfig() that step runs."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.args:
+            record.args = tuple(
+                re.sub(r"(://[^:/@\s]+:)[^@\s]+@", r"\1***@", a) if isinstance(a, str) else a
+                for a in record.args
+            )
+        return True
+
+
 if DATABASE_URL:
     _point_cognee_at_postgres(DATABASE_URL)
+    logging.getLogger("alembic.env").addFilter(_MaskDatabasePassword())
 
 # ── App-level LLM (grading + debrief), used by llm_client.py ────────────────
 # Kept SEPARATE from Cognee's LLM: the app talks to Gemini directly for quality
