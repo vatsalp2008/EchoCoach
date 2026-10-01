@@ -35,6 +35,14 @@ Do the steps in order — each one needs a value from the one before.
    gcloud init            # log in, pick the project
    gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
    ```
+   On a new project, also let the build account read the uploaded code and push the image — otherwise the first deploy fails with `PERMISSION_DENIED: Build failed because the default service account is missing required IAM permissions`:
+   ```bash
+   PROJECT=$(gcloud config get-value project)
+   NUMBER=$(gcloud projects describe "$PROJECT" --format='value(projectNumber)')
+   gcloud projects add-iam-policy-binding "$PROJECT" \
+     --member="serviceAccount:${NUMBER}-compute@developer.gserviceaccount.com" \
+     --role="roles/run.builder"
+   ```
 4. Create the backend's settings file **outside the repo** (it holds secrets — never commit it), e.g. `~/echocoach-cloudrun.yaml`. Copy the values from your local `.env`:
    ```yaml
    DATABASE_URL: "postgresql://...neon.tech/neondb?sslmode=require&channel_binding=require"

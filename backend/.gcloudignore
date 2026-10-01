@@ -1,0 +1,17 @@
+# What `gcloud run deploy --source backend` uploads to Cloud Build. Needed on
+# top of .dockerignore, which only trims the Docker build context AFTER the
+# upload — without this, the upload would include .venv and local user data.
+.gcloudignore
+.venv/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+scripts/
+*.db
+.cognee_data/
+.cognee_system/
+.data_storage/
+.env
+.env.*
+.DS_Store
