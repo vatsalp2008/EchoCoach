@@ -237,7 +237,9 @@ function AuthModal({
 
         {GOOGLE_CLIENT_ID && (
           <div className="mb-5">
-            <div ref={googleBtnRef} className="flex justify-center" />
+            {/* Light scheme for Google's iframe: in dark mode a scheme mismatch
+                makes the browser paint an opaque white box behind the button. */}
+            <div ref={googleBtnRef} className="flex justify-center" style={{ colorScheme: "light" }} />
             <div className="my-4 flex items-center gap-3 text-xs text-muted">
               <span className="h-px flex-1 bg-border" />
               or continue with email
