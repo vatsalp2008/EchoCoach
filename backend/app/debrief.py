@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 
 from . import db, llm_client
-from .llm_client import LLMQuotaError
 
 _DEBRIEF_PROMPT = """You are an expert interview coach writing a candidate's end-of-session debrief.
 Speak directly to the candidate in second person ("you"). Be specific, warm, and honest.
@@ -78,7 +77,10 @@ async def generate_debrief(session_id: str) -> str:
     )
     try:
         report = await llm_client.generate(prompt, temperature=0.4)
-    except LLMQuotaError:
+    except Exception:
+        # Quota, timeout, an overloaded model (Gemini 503), a bad key: the
+        # candidate still gets a usable report — the same fallback-first rule
+        # grading and follow-ups already follow, instead of a 500 at the finish.
         report = _template_debrief(signals, questions)
     db.store_debrief(session_id, report)  # freeze the original for History
     return report
