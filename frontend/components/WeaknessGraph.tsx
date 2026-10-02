@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { getGraph, GraphData, GraphNode } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
@@ -76,23 +76,16 @@ function DomainSection({ title, layout }: { title: string; layout: DomainLayout 
               <path d="M 0 0 L 10 5 L 0 10 z" style={{ fill: "var(--muted)" }} />
             </marker>
           </defs>
-          {layout.edges.map((e, i) => {
-            const x1 = e.source.x + CHIP_W / 2;
-            const y1 = e.source.y + CHIP_H;
-            const x2 = e.target.x + CHIP_W / 2;
-            const y2 = e.target.y;
-            const midY = (y1 + y2) / 2;
-            return (
-              <path
-                key={i}
-                d={`M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`}
-                fill="none"
-                style={{ stroke: "var(--muted)", strokeOpacity: 0.5 }}
-                strokeWidth={1.5}
-                markerEnd={`url(#arrow-${title})`}
-              />
-            );
-          })}
+          {layout.edges.map((e, i) => (
+            <path
+              key={i}
+              d={e.d}
+              fill="none"
+              style={{ stroke: "var(--muted)", strokeOpacity: 0.5 }}
+              strokeWidth={1.5}
+              markerEnd={`url(#arrow-${title})`}
+            />
+          ))}
         </svg>
         {hasUnranked && (
           <span
@@ -133,13 +126,25 @@ export default function WeaknessGraph() {
   const { user, loading } = useAuth();
   const [data, setData] = useState<GraphData | null>(null);
   const [error, setError] = useState("");
+  // Width the graph can use, so ranks wrap on a phone instead of forcing a
+  // sideways scroll (re-measured on resize / rotation).
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [boxWidth, setBoxWidth] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     if (!user) return;
     getGraph(user.id).then(setData).catch((e) => setError(String(e)));
   }, [user]);
 
-  const layout = data ? computeLayout(data) : null;
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setBoxWidth(entry.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const layout = data ? computeLayout(data, boxWidth) : null;
 
   return (
     <motion.div
@@ -166,7 +171,10 @@ export default function WeaknessGraph() {
         </div>
       )}
 
-      <div className="min-h-[420px] w-full overflow-auto rounded-xl border border-border bg-surface p-5">
+      <div
+        ref={boxRef}
+        className="min-h-[420px] w-full overflow-auto rounded-xl border border-border bg-surface p-4 sm:p-5"
+      >
         {!loading && !user ? (
           <div className="grid h-full min-h-[380px] place-items-center px-6 text-center text-sm text-muted">
             Log in to see your weakness graph.

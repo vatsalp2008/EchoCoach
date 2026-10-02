@@ -112,23 +112,22 @@ function NodeGraph() {
   const labels = LABEL_SETS[setIdx];
 
   return (
-    <div ref={ref} className="relative mx-auto aspect-[16/10] w-full max-w-2xl">
-      <svg
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        className="absolute inset-0 h-full w-full"
-      >
+    // Square on phones: at 16:10 the bottom row's labels nearly touch.
+    <div ref={ref} className="relative mx-auto aspect-square w-full max-w-2xl sm:aspect-[16/10]">
+      {/* No viewBox: percentage coordinates resolve against the box's own pixels,
+          so the stroke stays 1px without vector-effect="non-scaling-stroke" —
+          which breaks the pathLength draw-in (its dash pattern shows as dashes). */}
+      <svg className="absolute inset-0 h-full w-full">
         {EDGES.map(([a, b], i) => (
           <motion.line
             key={i}
-            x1={NODES[a].x}
-            y1={NODES[a].y}
-            x2={NODES[b].x}
-            y2={NODES[b].y}
+            x1={`${NODES[a].x}%`}
+            y1={`${NODES[a].y}%`}
+            x2={`${NODES[b].x}%`}
+            y2={`${NODES[b].y}%`}
             stroke="var(--primary)"
             strokeWidth={1}
             strokeOpacity={0.35}
-            vectorEffect="non-scaling-stroke"
             initial={{ pathLength: 0 }}
             animate={{ pathLength: visible ? 1 : 0 }}
             transition={{ duration: 0.8, delay: 0.3 + i * 0.08, ease: "easeOut" }}
@@ -139,9 +138,11 @@ function NodeGraph() {
       {NODES.map((n, i) => {
         const isActive = i === active;
         return (
+          // Anchored on the dot's center (half its 20px height), not the
+          // dot+label stack's, so the edges meet the dots; labels hang below.
           <div
             key={i}
-            className="absolute -translate-x-1/2 -translate-y-1/2"
+            className="absolute -translate-x-1/2 -translate-y-2.5"
             style={{ left: `${n.x}%`, top: `${n.y}%` }}
           >
             <motion.div
