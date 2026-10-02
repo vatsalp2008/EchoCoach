@@ -1,12 +1,17 @@
-# ── Local neural TTS (Kokoro-82M via MLX; optional; see app/tts.py) ──────────
-# Apple Silicon only (same as mlx-whisper). Without these, the interviewer just
-# uses the browser's built-in voice — nothing breaks.
+# ── Neural TTS (Kokoro-82M; optional; see app/tts.py) ───────────────────────
+# Without these, the interviewer just uses the browser's built-in voice —
+# nothing breaks. Two engines, same model and voice:
+#   • Apple Silicon: mlx-audio (MLX), the team's Macs.
+#   • Linux (the Cloud Run image): kokoro-onnx on ONNX Runtime, CPU. Its model
+#     files are downloaded by the Dockerfile, not pip.
 #
 # Kept out of requirements.txt because misaki's metadata still caps
-# Requires-Python at <3.13 even though it runs fine on 3.14 (verified), so pip
-# needs a flag we don't want applied to the main install:
+# Requires-Python at <3.13 even though it runs fine on 3.14 (verified), so on a
+# Mac with Python 3.14 pip needs a flag we don't want applied to the main install:
 #
 #   .venv/bin/pip install --ignore-requires-python -r requirements-tts.txt
+#
+# (The container runs Python 3.12, so it needs no flag.)
 #
 # Pinned to a set that installs from wheels alongside cognee/litellm (which pin
 # click and tokenizers exactly); left unpinned, pip backtracks into spaCy
@@ -19,3 +24,15 @@ transformers==5.15.1 ; sys_platform == "darwin" and platform_machine == "arm64"
 # spaCy model misaki loads at runtime; it would otherwise try to pip-install it
 # on first use, from inside the server process.
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl ; sys_platform == "darwin" and platform_machine == "arm64"
+
+# Linux: the ONNX engine. misaki without its [en] extra, which would pull in
+# spacy-curated-transformers and with it PyTorch (gigabytes) — only needed for
+# the transformer G2P, which tts.py doesn't use (trf=False). Its other English
+# dependencies are listed instead.
+kokoro-onnx==0.4.7 ; sys_platform == "linux"
+misaki==0.9.4 ; sys_platform == "linux"
+spacy==3.8.13 ; sys_platform == "linux"
+num2words==0.5.14 ; sys_platform == "linux"
+phonemizer-fork==3.3.1 ; sys_platform == "linux"
+espeakng-loader==0.2.4 ; sys_platform == "linux"
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl ; sys_platform == "linux"

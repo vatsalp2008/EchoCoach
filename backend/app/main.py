@@ -73,7 +73,7 @@ async def _startup() -> None:
     db.init_db()
     memory.init()  # configure Cognee's local stack + Gemini providers once
     stt.warm_up()  # load the local Whisper model once; self-guards against failure
-    tts.warm_up()  # same for the local Kokoro voice
+    tts.warm_up()  # starts loading the Kokoro voice in the background (see tts.py)
 
 
 app.include_router(graph_api.router)

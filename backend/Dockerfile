@@ -18,8 +18,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     # The browser's own speech recognition stays the default engine in the UI.
     ENABLE_WHISPER_STT=1 \
     WHISPER_MODEL_FW=/opt/whisper/base.en \
-    # Kokoro TTS is Apple-Silicon-only; the browser voice is used instead.
-    ENABLE_KOKORO_TTS=0 \
+    # The interviewer's Kokoro voice, on ONNX Runtime (the MLX engine is
+    # Apple-Silicon-only): same model and voice as on the Macs, files baked in.
+    ENABLE_KOKORO_TTS=1 \
+    TTS_ENGINE=onnx \
+    TTS_ONNX_MODEL=/opt/kokoro/kokoro-v1.0.onnx \
+    TTS_ONNX_VOICES=/opt/kokoro/voices-v1.0.bin \
+    # One ONNX thread per vCPU (--cpu 1). Auto-detection would see the startup
+    # CPU boost's 2 vCPUs, and 2 threads on 1 vCPU rendered ~40% slower.
+    TTS_THREADS=1 \
     # Cognee pings the LLM once per process before its first op; each cold
     # start would spend a request of the Gemini quota on it.
     COGNEE_SKIP_CONNECTION_TEST=true \
@@ -27,10 +34,20 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATA_DIR=/tmp/echocoach
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt \
+COPY requirements.txt requirements-tts.txt ./
+# Kokoro's files come from kokoro-onnx's v1.0 release (~350 MB), checked
+# against pinned SHA-256s so a changed or corrupt download fails the build.
+RUN pip install -r requirements.txt -r requirements-tts.txt \
  && python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')" \
  && python -c "from faster_whisper import download_model; download_model('base.en', output_dir='/opt/whisper/base.en')" \
+ && python -c "import hashlib, os, urllib.request; \
+base = 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/'; \
+files = {'kokoro-v1.0.onnx': '7d5df8ecf7d4b1878015a32686053fd0eebe2bc377234608764cc0ef3636a6c5', \
+         'voices-v1.0.bin': 'bca610b8308e8d99f32e6fe4197e7ec01679264efed0cac9140fe9c29f1fbf7d'}; \
+os.makedirs('/opt/kokoro', exist_ok=True); \
+[urllib.request.urlretrieve(base + f, '/opt/kokoro/' + f) for f in files]; \
+bad = [f for f, h in files.items() if hashlib.sha256(open('/opt/kokoro/' + f, 'rb').read()).hexdigest() != h]; \
+assert not bad, f'checksum mismatch: {bad}'" \
  && useradd --create-home app \
  && chown -R app /opt/fastembed /opt/whisper
 

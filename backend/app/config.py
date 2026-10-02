@@ -134,10 +134,20 @@ WHISPER_FW_COMPUTE = os.getenv("WHISPER_FW_COMPUTE", "int8")   # e.g. int8 | flo
 
 # ── Server-side text-to-speech (Kokoro) ──────────────────────────────────────
 # Additive to the browser's SpeechSynthesis voice (see tts.py): a neural voice
-# that sounds human instead of robotic. Needs the optional requirements-tts.txt
-# (Apple Silicon); without it the frontend keeps using the browser voice.
+# that sounds human instead of robotic. Needs the optional requirements-tts.txt;
+# without it the frontend keeps using the browser voice. Two engines, same
+# model and voice, auto-selected in tts.py like the Whisper ones:
+#   • mlx    — mlx-audio, Apple Silicon only (the team's Macs).
+#   • onnx   — kokoro-onnx on ONNX Runtime, any CPU (the Cloud Run container).
 ENABLE_KOKORO_TTS = os.getenv("ENABLE_KOKORO_TTS", "1") != "0"
+TTS_ENGINE = os.getenv("TTS_ENGINE", "auto")  # "auto" | "mlx" | "onnx"
 TTS_MODEL_REPO = os.getenv("TTS_MODEL_REPO", "mlx-community/Kokoro-82M-bf16")
+# The ONNX engine's files: kokoro-onnx's v1.0 release (kokoro-v1.0.onnx and
+# voices-v1.0.bin), baked into the container image.
+TTS_ONNX_MODEL = os.getenv("TTS_ONNX_MODEL", "")
+TTS_ONNX_VOICES = os.getenv("TTS_ONNX_VOICES", "")
+# ONNX Runtime threads; 0 = the CPUs this container may actually use.
+TTS_THREADS = int(os.getenv("TTS_THREADS", "0"))
 # Kokoro voice id; the first letter is the accent (a = American, b = British),
 # the second the gender — e.g. af_heart, am_michael, bf_emma, bm_george.
 TTS_VOICE = os.getenv("TTS_VOICE", "af_heart")
