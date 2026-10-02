@@ -18,12 +18,14 @@ export default function TopNav() {
 
   return (
     <nav className="w-full border-b border-border bg-surface">
-      <div className="mx-auto flex max-w-4xl items-center gap-6 px-4 py-3 text-sm">
+      <div className="mx-auto flex max-w-4xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-3 text-sm">
         <Link href="/" className="text-base font-bold tracking-tight text-foreground">
           EchoCoach
         </Link>
         {!loading && user && (
-          <>
+          // On phones the links drop to their own row under the logo, so they
+          // never push Sign out off-screen; from sm up it's one row.
+          <div className="order-last flex w-full gap-6 sm:order-none sm:w-auto">
             {NAV_LINKS.map(({ href, label }) => {
               const active = pathname === href;
               return (
@@ -46,7 +48,7 @@ export default function TopNav() {
                 </Link>
               );
             })}
-          </>
+          </div>
         )}
 
         <div className="ml-auto flex items-center gap-3">

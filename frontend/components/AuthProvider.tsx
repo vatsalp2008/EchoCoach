@@ -147,7 +147,8 @@ function AuthModal({
         theme: resolvedTheme === "dark" ? "filled_black" : "outline",
         size: "large",
         text: isSignup ? "signup_with" : "signin_with",
-        width: 360,
+        // Fit the modal on phones: Google renders a fixed-width iframe (200-400px).
+        width: Math.max(200, Math.min(360, googleBtnRef.current.clientWidth)),
       });
     };
 

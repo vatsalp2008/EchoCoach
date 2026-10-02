@@ -55,10 +55,10 @@ export default function HistoryPage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center px-4 py-14">
+    <main className="flex min-h-screen flex-col items-center px-4 py-8 sm:py-14">
       <div className="w-full max-w-2xl">
         <header className="mb-10">
-          <h1 className="text-4xl font-bold tracking-tight text-foreground">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
             Session history
           </h1>
           <p className="mt-2 text-lg text-muted">
@@ -73,7 +73,7 @@ export default function HistoryPage() {
         )}
 
         {!loading && !user && (
-          <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
+          <div className="rounded-2xl border border-border bg-surface p-5 text-center shadow-sm sm:p-8">
             <p className="text-base text-muted">
               <button
                 onClick={openLogin}
@@ -124,7 +124,7 @@ export default function HistoryPage() {
           <Reveal className="space-y-3">
             {sessions === null && <p className="text-sm text-muted">Loading…</p>}
             {sessions?.length === 0 && (
-              <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
+              <div className="rounded-2xl border border-border bg-surface p-5 text-center shadow-sm sm:p-8">
                 <p className="text-base text-muted">
                   No sessions yet. Start one from the{" "}
                   <a href="/" className="font-semibold text-primary hover:underline">

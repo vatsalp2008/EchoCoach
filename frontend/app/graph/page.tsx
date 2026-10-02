@@ -2,7 +2,7 @@ import WeaknessGraph from "@/components/WeaknessGraph";
 
 export default function GraphPage() {
   return (
-    <main className="flex min-h-screen flex-col items-center px-4 py-12">
+    <main className="flex min-h-screen flex-col items-center px-4 py-8 sm:py-12">
       <div className="w-full max-w-4xl">
         <header className="mb-6">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Weakness graph</h1>

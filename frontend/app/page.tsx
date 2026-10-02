@@ -61,7 +61,7 @@ const primaryBtn =
   "rounded-xl bg-primary px-5 py-2.5 text-base font-semibold text-primary-foreground transition hover:bg-primary-hover disabled:opacity-40 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 const ghostBtn =
   "rounded-xl border border-border px-5 py-2.5 text-base font-medium text-foreground transition hover:bg-surface-2 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
-const card = "rounded-2xl border border-border bg-surface p-6 shadow-sm";
+const card = "rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6";
 
 export default function Home() {
   const { user, loading, openLogin } = useAuth();
@@ -345,20 +345,20 @@ export default function Home() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center px-4 py-12">
+    <main className="flex min-h-screen flex-col items-center px-4 py-8 sm:py-12">
       <div className="w-full max-w-2xl">
-        <header className="mb-12 flex items-start justify-between gap-4">
+        <header className="mb-8 flex items-start justify-between gap-4 sm:mb-12">
           <div>
-            <h1 className="text-5xl font-bold tracking-tight text-foreground">
+            <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
               EchoCoach
             </h1>
-            <p className="mt-3 text-xl text-muted">
+            <p className="mt-3 text-lg text-muted sm:text-xl">
               The interviewer that remembers what you struggled with.
             </p>
           </div>
           {sessionStartRef.current !== null && sessionActive && (
             <div className="shrink-0 text-right" aria-label="Session timer">
-              <div className="font-mono text-xl tabular-nums text-foreground">
+              <div className="font-mono text-lg tabular-nums text-foreground sm:text-xl">
                 ⏱ {fmtDuration(elapsedMs)}
               </div>
               <div className="text-[11px] uppercase tracking-wide text-muted">
@@ -385,7 +385,7 @@ export default function Home() {
             className="space-y-8"
           >
             <div>
-              <h2 className="text-3xl font-bold tracking-tight text-foreground">
+              <h2 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
                 {user ? `Welcome back, ${user.display_name.split(" ")[0]}.` : "Start a mock interview"}
               </h2>
               <p className="mt-2 text-lg text-muted">
@@ -408,7 +408,7 @@ export default function Home() {
 
             <form
               onSubmit={beginIntro}
-              className="space-y-7 rounded-2xl border border-border bg-surface p-8 shadow-sm"
+              className="space-y-7 rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-8"
             >
               <div>
                 <label className={labelCls}>
@@ -676,7 +676,7 @@ export default function Home() {
                   {mainQuestion}
                 </div>
               )}
-              <p className="text-2xl leading-relaxed text-foreground">{current.question}</p>
+              <p className="text-xl leading-relaxed text-foreground sm:text-2xl">{current.question}</p>
             </motion.div>
 
             {current.coding ? (

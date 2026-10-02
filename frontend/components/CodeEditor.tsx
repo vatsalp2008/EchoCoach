@@ -27,6 +27,13 @@ export default function CodeEditor({
   const { resolvedTheme } = useTheme();
   const [lang, setLang] = useState("python");
   const [code, setCode] = useState("");
+  // Monaco doesn't support mobile browsers (typing with a touch keyboard is
+  // unreliable, and its small font makes iOS zoom the page on focus), so touch
+  // devices get a plain monospace textarea. Only rendered client-side, mid-
+  // interview, so reading matchMedia on first render can't mismatch hydration.
+  const [touch] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches
+  );
 
   function emit(nextCode: string, nextLang: string) {
     setCode(nextCode);
@@ -52,20 +59,35 @@ export default function CodeEditor({
           ))}
         </select>
       </div>
-      <Monaco
-        height="300px"
-        language={lang}
-        theme={resolvedTheme === "dark" ? "vs-dark" : "vs-light"}
-        value={code}
-        onChange={(v) => emit(v ?? "", lang)}
-        options={{
-          minimap: { enabled: false },
-          fontSize: 13,
-          scrollBeyondLastLine: false,
-          lineNumbers: "on",
-          tabSize: 2,
-        }}
-      />
+      {touch ? (
+        <textarea
+          value={code}
+          onChange={(e) => emit(e.target.value, lang)}
+          rows={12}
+          spellCheck={false}
+          autoCapitalize="off"
+          autoCorrect="off"
+          autoComplete="off"
+          aria-label="Code editor"
+          placeholder="Write your code here…"
+          className="block w-full resize-y bg-surface px-3 py-2.5 font-mono text-base leading-6 text-foreground outline-none placeholder:text-muted/60"
+        />
+      ) : (
+        <Monaco
+          height="300px"
+          language={lang}
+          theme={resolvedTheme === "dark" ? "vs-dark" : "vs-light"}
+          value={code}
+          onChange={(v) => emit(v ?? "", lang)}
+          options={{
+            minimap: { enabled: false },
+            fontSize: 13,
+            scrollBeyondLastLine: false,
+            lineNumbers: "on",
+            tabSize: 2,
+          }}
+        />
+      )}
     </div>
   );
 }
