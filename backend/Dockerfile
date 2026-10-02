@@ -12,9 +12,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     # The embedding model is baked in below; fastembed reads it from here at
     # runtime instead of downloading ~130 MB on every cold start.
     FASTEMBED_CACHE_PATH=/opt/fastembed \
-    # Server-side Whisper would load a ~460 MB model at startup (the browser's
-    # speech recognition covers voice answers), and Kokoro is Apple-Silicon-only.
-    ENABLE_WHISPER_STT=0 \
+    # Server-side Whisper runs on faster-whisper here (the MLX engine is
+    # Apple-Silicon-only) with the small English model, also baked in below:
+    # ~150 MB, loads in well under a second, so cold starts barely notice.
+    # The browser's own speech recognition stays the default engine in the UI.
+    ENABLE_WHISPER_STT=1 \
+    WHISPER_MODEL_FW=/opt/whisper/base.en \
+    # Kokoro TTS is Apple-Silicon-only; the browser voice is used instead.
     ENABLE_KOKORO_TTS=0 \
     # Cognee pings the LLM once per process before its first op; each cold
     # start would spend a request of the Gemini quota on it.
@@ -26,8 +30,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt \
  && python -c "from fastembed import TextEmbedding; TextEmbedding('BAAI/bge-small-en-v1.5')" \
+ && python -c "from faster_whisper import download_model; download_model('base.en', output_dir='/opt/whisper/base.en')" \
  && useradd --create-home app \
- && chown -R app /opt/fastembed
+ && chown -R app /opt/fastembed /opt/whisper
 
 COPY app ./app
 USER app

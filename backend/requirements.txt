@@ -23,6 +23,10 @@ google-auth==2.55.1
 # ── Local Whisper STT (server-side, opt-in; see app/stt.py) ──────────────────
 # Cross-platform engine — works on Windows/Linux/Intel Mac (CPU or CUDA).
 faster-whisper==1.2.1
+# faster-whisper decodes audio through PyAV and still passes av.open(...,
+# metadata_errors=...), which av 19 removed — unpinned, a fresh install broke
+# every transcription. Keep at the tested version until faster-whisper catches up.
+av==18.0.0
 # Apple-Silicon-only fast path. Markers keep `pip install -r requirements.txt`
 # from failing on non-Apple machines (mlx has no wheels there).
 mlx==0.31.2 ; sys_platform == "darwin" and platform_machine == "arm64"

@@ -622,7 +622,13 @@ export default function Home() {
                       type="button"
                       disabled={!avail}
                       onClick={() => setSttEngine(eng)}
-                      title={avail ? undefined : `${lbl} isn't available in this browser`}
+                      title={
+                        avail
+                          ? undefined
+                          : eng === "whisper" && !whisperAvail
+                            ? "Whisper isn't available on the server right now"
+                            : `${lbl} isn't available in this browser`
+                      }
                       className={
                         "rounded-md px-3 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
                         (sttEngine === eng

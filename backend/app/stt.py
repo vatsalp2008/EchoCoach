@@ -25,6 +25,7 @@ import base64
 import logging
 import os
 import tempfile
+import wave
 
 from .config import (
     ENABLE_WHISPER_STT,
@@ -103,9 +104,22 @@ def warm_up() -> None:
             _fw_model = WhisperModel(
                 WHISPER_MODEL_FW, device=WHISPER_FW_DEVICE, compute_type=WHISPER_FW_COMPUTE
             )
-            # Force the (lazy) generator to run so the model actually loads now.
-            segments, _ = _fw_model.transcribe(np.zeros(16000, dtype=np.float32))
-            list(segments)
+            # Warm up on a real (silent) audio FILE rather than an in-memory
+            # array: that runs the same PyAV decode path every transcription
+            # uses, so a broken decoder marks Whisper unavailable now instead of
+            # failing each request later. list() forces the lazy generator.
+            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+            try:
+                with wave.open(tmp, "wb") as w:
+                    w.setnchannels(1)
+                    w.setsampwidth(2)
+                    w.setframerate(16000)
+                    w.writeframes(b"\x00\x00" * 16000)
+                tmp.close()
+                segments, _ = _fw_model.transcribe(tmp.name)
+                list(segments)
+            finally:
+                os.unlink(tmp.name)
 
         _available = True
         log.info("Whisper STT warm: engine=%s model=%s", _engine, _model_name())
