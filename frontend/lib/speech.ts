@@ -119,7 +119,9 @@ let _source: AudioBufferSourceNode | null = null;
 let _analyser: AnalyserNode | null = null; // set only while server audio plays
 let _speakToken = 0;
 let _serverTts: Promise<boolean> | null = null;
-let _lastAudio: { text: string; buffer: AudioBuffer } | null = null; // makes replay instant
+const _audioCache = new Map<string, AudioBuffer>(); // per sentence - makes replay instant
+const AUDIO_CACHE_MAX = 40;
+const SENTENCE_GAP_S = 0.28; // pause between sentences (the server trims each one's edges)
 
 function audioCtx(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -149,18 +151,49 @@ function serverTtsAvailable(): Promise<boolean> {
   return _serverTts;
 }
 
+/** Sentences, for rendering one at a time: on Cloud Run's one vCPU the server
+ * voice takes ~0.7-0.9s per second of speech, so a whole question at once
+ * would mean a long silence before it starts. Splits only where a new
+ * sentence clearly begins (so "3.5" and "e.g. a queue" stay whole) and folds
+ * short pieces ("Great.", "Mr.") into the next one. */
+function splitSentences(text: string): string[] {
+  const out: string[] = [];
+  for (const s of text.trim().split(/(?<=[.!?])\s+(?=["'([]?[A-Z0-9])/)) {
+    if (out.length && out[out.length - 1].length < 25) out[out.length - 1] += " " + s;
+    else if (s) out.push(s);
+  }
+  return out.length ? out : [text];
+}
+
+async function sentenceAudio(ctx: AudioContext, sentence: string): Promise<AudioBuffer> {
+  const hit = _audioCache.get(sentence);
+  if (hit) return hit;
+  const buffer = await ctx.decodeAudioData(await synthesizeSpeech(sentence));
+  _audioCache.set(sentence, buffer);
+  if (_audioCache.size > AUDIO_CACHE_MAX) _audioCache.delete(_audioCache.keys().next().value!);
+  return buffer;
+}
+
 async function speakServer(text: string, h: SpeakHandlers, token: number): Promise<boolean> {
   const ctx = audioCtx();
   if (!ctx || !(await serverTtsAvailable())) return false;
   try {
-    let buffer = _lastAudio?.text === text ? _lastAudio.buffer : null;
-    if (!buffer) {
-      const wav = await synthesizeSpeech(text);
-      if (token !== _speakToken) return true; // superseded - stay quiet
-      buffer = await ctx.decodeAudioData(wav);
-      _lastAudio = { text, buffer };
+    // Request the sentences one after another (the server renders one at a
+    // time anyway), so sentence n+1 renders while sentence n plays.
+    const parts = splitSentences(text);
+    const buffers: Promise<AudioBuffer>[] = [];
+    let prev: Promise<unknown> = Promise.resolve();
+    for (const part of parts) {
+      // Once superseded, stop asking: a stale render would hold up the next question's.
+      const next = prev.then(() =>
+        token === _speakToken ? sentenceAudio(ctx, part) : Promise.reject(new Error("superseded"))
+      );
+      next.catch(() => {}); // a failure is handled where it's awaited
+      buffers.push(next);
+      prev = next.catch(() => {});
     }
-    if (token !== _speakToken) return true;
+    const first = await buffers[0];
+    if (token !== _speakToken) return true; // superseded - stay quiet
     // resume() never settles while autoplay is blocked, so don't wait forever.
     if (ctx.state !== "running") {
       await Promise.race([ctx.resume(), new Promise((r) => setTimeout(r, 300))]);
@@ -168,12 +201,9 @@ async function speakServer(text: string, h: SpeakHandlers, token: number): Promi
     if (token !== _speakToken) return true;
     if (ctx.state !== "running") return false; // still blocked - use the browser voice
 
-    const src = ctx.createBufferSource();
-    src.buffer = buffer;
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 1024; // ~21ms window - about one syllable
     analyser.smoothingTimeConstant = 0.75; // the value the visualizer was tuned with
-    src.connect(analyser);
     analyser.connect(ctx.destination);
 
     // Loudness onsets stand in for the browser engine's word boundaries. The
@@ -196,17 +226,36 @@ async function speakServer(text: string, h: SpeakHandlers, token: number): Promi
       raf = requestAnimationFrame(tick);
     };
 
-    src.onended = () => {
+    _analyser = analyser;
+    h.onStart?.();
+    raf = requestAnimationFrame(tick);
+    // Back to back, a short pause apart - or as soon as the next sentence
+    // arrives, if rendering fell behind playback.
+    void (async () => {
+      let src: AudioBufferSourceNode | null = null;
+      let startAt = ctx.currentTime;
+      for (let i = 0; i < buffers.length && token === _speakToken; i++) {
+        let buffer: AudioBuffer;
+        try {
+          buffer = i === 0 ? first : await buffers[i];
+        } catch {
+          break; // a later sentence failed: stop here rather than switch voices mid-question
+        }
+        if (token !== _speakToken) break;
+        src = ctx.createBufferSource();
+        src.buffer = buffer;
+        src.connect(analyser);
+        _source = src;
+        const ended = new Promise<void>((done) => (src!.onended = () => done()));
+        src.start(Math.max(ctx.currentTime, startAt));
+        await ended; // also resolves when cancelSpeak() stops it
+        startAt = ctx.currentTime + SENTENCE_GAP_S;
+      }
       cancelAnimationFrame(raf);
       if (_source === src) _source = null;
       if (_analyser === analyser) _analyser = null;
       h.onEnd?.();
-    };
-    _source = src;
-    _analyser = analyser;
-    h.onStart?.();
-    src.start();
-    raf = requestAnimationFrame(tick);
+    })();
     return true;
   } catch {
     return false;

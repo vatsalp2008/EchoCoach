@@ -609,7 +609,10 @@ export default function Home() {
             </div>
 
             {voiceMode && (speechSupported() || whisperAvail) && (
-              <div className="flex justify-end">
+              // Labelled because it's easy to read as the interviewer's voice:
+              // it only picks who turns *your* spoken answer into text.
+              <div className="flex items-center justify-end gap-2">
+                <span className="text-xs text-muted">Transcribe with</span>
                 <div className="inline-flex rounded-lg border border-border bg-surface p-0.5 text-xs">
                   {(
                     [
@@ -624,7 +627,9 @@ export default function Home() {
                       onClick={() => setSttEngine(eng)}
                       title={
                         avail
-                          ? undefined
+                          ? eng === "browser"
+                            ? "Your browser transcribes your answer as you speak"
+                            : "The server transcribes your answer with Whisper when you press Stop"
                           : eng === "whisper" && !whisperAvail
                             ? "Whisper isn't available on the server right now"
                             : `${lbl} isn't available in this browser`
